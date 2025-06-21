@@ -61,18 +61,33 @@ class MazeEnvironment:
         return float('inf')
 
     def _compute_auto_budget(self) -> int:
-        # 1) Identify the higher‐value reward
-        high_pos, _ = max(self.initial_rewards, key=lambda x: x[1])
-
-        # 2) dist1 = start → high_reward
-        d1 = self._bfs_dist(self.start, high_pos)
-        # 3) d2 = high_reward → exit
-        d2 = self._bfs_dist(high_pos, self.exit)
-
-        # 4) budget = d1 + d2
-        #    (if any leg is unreachable, fallback to 1)
-        total = d1 + d2
-        return int(total) if total < float('inf') else 1
+        """
+        Compute step budget to ensure:
+        1. Agent can collect highest-value reward and reach exit with minimal buffer
+        2. Cannot collect both rewards if taking inefficient paths
+        3. Encourages efficient path planning
+        """
+        # Get all key positions
+        positions = [self.start] + [pos for pos, _ in self.initial_rewards] + [self.exit]
+        
+        # Calculate all pairwise distances
+        n = len(positions)
+        dist = [[self._bfs_dist(positions[i], positions[j]) for j in range(n)] for i in range(n)]
+        
+        # Find path length to highest reward then exit
+        high_reward_idx = max(range(1, n-1), key=lambda i: self.initial_rewards[i-1][1])
+        min_critical_path = dist[0][high_reward_idx] + dist[high_reward_idx][n-1]
+        
+        # Handle unreachable paths
+        if min_critical_path == float('inf'):
+            # If critical path is unreachable, set a reasonable default budget
+            return 100
+        
+        # Add very small buffer (just 2-3 steps) to allow for minor deviations
+        buffer = min(3, int(min_critical_path * 0.1))
+        
+        total_budget = min_critical_path + buffer
+        return max(1, int(total_budget))  # Ensure at least 1 step
 
     def reset(self) -> Tuple[int,int]:
         self.agent_pos = self.start

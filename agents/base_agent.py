@@ -9,6 +9,8 @@ class BaseAgent(ABC):
     def __init__(self):
         self.position: Tuple[int, int] = (0, 0)
         self.total_reward: float = 0.0
+        self.swap_prob = None
+        self.swap_steps = None
 
     def set_position(self, pos: Tuple[int, int]) -> None:
         self.position = pos
@@ -21,6 +23,9 @@ class BaseAgent(ABC):
 
     def get_total_reward(self) -> float:
         return self.total_reward
+
+    def inform_swap_info(self, swap_prob):
+        self.swap_prob = swap_prob
 
     @abstractmethod
     def select_action(self, state: Any) -> str:

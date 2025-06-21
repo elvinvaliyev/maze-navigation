@@ -11,6 +11,8 @@ if project_root not in sys.path:
 from environments.maze_environment      import MazeEnvironment
 from agents.model_based_greedy_agent    import ModelBasedGreedyAgent
 from agents.model_based_survival_agent  import ModelBasedSurvivalAgent
+from agents.sr_greedy_agent            import SuccessorRepresentationGreedyAgent
+from agents.sr_reasonable_agent        import SuccessorRepresentationReasonableAgent
 from utils.schedule_swaps               import schedule_fork_swap
 
 def run_interactive(env, agent, pause=0.2):
@@ -79,10 +81,10 @@ def run_interactive(env, agent, pause=0.2):
         if isinstance(agent, ModelBasedSurvivalAgent):
             print("❗ Survival agent stopped safely (ran out of moves at budget).")
         else:
-            print("⚠️ Greedy agent ran out of moves before reaching the exit.")
+            print("⚠️ Agent ran out of moves before reaching the exit.")
 
 if __name__ == "__main__":
-    cfg = os.path.join(project_root, "environments", "maze_configs", "maze2.json")
+    cfg = os.path.join(project_root, "environments", "maze_configs", "maze1.json")
     env = MazeEnvironment.from_json(cfg)
     print("Auto-computed step budget:", env.max_steps)
 
@@ -96,8 +98,17 @@ if __name__ == "__main__":
     env.swap_prob = 1.0
     print("Fork-scheduled swap step:", env.swap_steps)
 
-    # choose your agent:
-    # agent = ModelBasedGreedyAgent(step_budget=env.max_steps)     # impulsive
-    agent = ModelBasedSurvivalAgent(env.max_steps)             # budget-aware
+    # Choose exactly one agent to run:
+    # 1) Impulsive Greedy (ignores budget):
+    agent = ModelBasedGreedyAgent(step_budget=env.max_steps)
+
+    # 2) Survival-Aware (won't die if it can avoid it):
+    #agent = ModelBasedSurvivalAgent(env.max_steps)
+
+    # 3) SR-Greedy (learns successor representation online, then acts greedily):
+    #agent = SuccessorRepresentationGreedyAgent(alpha=0.1)
+
+    # 4) SR-Reasonable (SR + exploration bonus + swap-risk adjustment):
+    #agent = SuccessorRepresentationReasonableAgent(alpha=0.1, beta=1.0)
 
     run_interactive(env, agent)

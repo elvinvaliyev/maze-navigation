@@ -28,6 +28,72 @@ def shortest_path(
                 q.append(path + [(nr, nc)])
     return []
 
+def find_all_decision_points(
+    grid: List[List[int]],
+    start: Tuple[int,int],
+    reward_positions: List[Tuple[int,int]]
+) -> List[Tuple[int,int]]:
+    """Find all points where paths to different rewards diverge."""
+    if len(reward_positions) != 2:
+        return []
+        
+    # Get paths to both rewards
+    path1 = shortest_path(grid, start, reward_positions[0])
+    path2 = shortest_path(grid, start, reward_positions[1])
+    
+    # Find all points where paths diverge
+    decision_points = []
+    common_prefix_len = 0
+    for p1, p2 in zip(path1, path2):
+        if p1 == p2:
+            common_prefix_len += 1
+        else:
+            break
+            
+    if common_prefix_len > 0:
+        # Add the last common point
+        decision_points.append(path1[common_prefix_len - 1])
+        
+    # Also check for decision points from each reward to the other
+    path_between = shortest_path(grid, reward_positions[0], reward_positions[1])
+    if len(path_between) > 2:  # If rewards aren't adjacent
+        mid_point = path_between[len(path_between) // 2]
+        if mid_point not in decision_points:
+            decision_points.append(mid_point)
+            
+    return decision_points
+
+def compute_optimal_swap_steps(
+    grid: List[List[int]],
+    start: Tuple[int,int],
+    reward_positions: List[Tuple[int,int]],
+    max_steps: int
+) -> List[int]:
+    """
+    Schedule swaps at strategic decision points, considering:
+    1. Points where paths to different rewards diverge
+    2. Midpoints between rewards
+    3. Time needed to reach these points
+    """
+    decision_points = find_all_decision_points(grid, start, reward_positions)
+    if not decision_points:
+        return []
+        
+    swap_steps = []
+    for point in decision_points:
+        # Calculate steps needed to reach this point
+        path_to_point = shortest_path(grid, start, point)
+        steps_to_point = len(path_to_point) - 1  # -1 because path includes start
+        
+        # Add some randomness to make it less predictable
+        jitter = random.randint(-2, 2)
+        swap_step = max(1, min(steps_to_point + jitter, max_steps - 1))
+        
+        if swap_step not in swap_steps:
+            swap_steps.append(swap_step)
+            
+    return sorted(swap_steps)
+
 def schedule_fork_swap(
     grid: List[List[int]],
     start: Tuple[int,int],
@@ -35,33 +101,39 @@ def schedule_fork_swap(
     jitter: int = 1
 ) -> List[int]:
     """
-    Schedule exactly one swap event at the decision fork:
-      1) Compute shortest paths P1, P2 from start→each reward.
-      2) Find last common node (LCN) in P1 & P2.
-      3) Swap step = index_of_LCN + 1 ± jitter.
-    Returns a single-element list [t] or [] if no fork found.
+    Enhanced swap scheduling that works well for both simple and complex mazes.
     """
-    if len(reward_positions) != 2:
-        return []
-    # 1) get the two paths
-    p1 = shortest_path(grid, start, reward_positions[0])
-    p2 = shortest_path(grid, start, reward_positions[1])
-    # 2) find LCN
-    lcn = start
-    for u, v in zip(p1, p2):
-        if u == v:
-            lcn = u
-        else:
-            break
-    # distance to LCN
-    try:
-        d_fork = p1.index(lcn)
-    except ValueError:
-        return []
-    # 3) compute swap step
-    base = d_fork + 1
-    # apply jitter
-    t = base + random.randint(-jitter, jitter)
-    # ensure at least 1
-    t = max(1, t)
-    return [t]
+    # First try to find the optimal swap steps
+    swap_steps = compute_optimal_swap_steps(grid, start, reward_positions, 100)  # Use large max_steps initially
+    
+    if not swap_steps:
+        # Fallback to original method for simpler mazes
+        if len(reward_positions) != 2:
+            return []
+            
+        # Find last common node in paths to rewards
+        p1 = shortest_path(grid, start, reward_positions[0])
+        p2 = shortest_path(grid, start, reward_positions[1])
+        
+        lcn = start
+        for u, v in zip(p1, p2):
+            if u == v:
+                lcn = u
+            else:
+                break
+                
+        # Distance to LCN
+        try:
+            d_fork = p1.index(lcn)
+        except ValueError:
+            return []
+            
+        # Compute swap step
+        base = d_fork + 1
+        # Apply jitter
+        t = base + random.randint(-jitter, jitter)
+        # Ensure at least 1
+        t = max(1, t)
+        return [t]
+        
+    return swap_steps
