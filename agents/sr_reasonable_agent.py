@@ -90,19 +90,15 @@ class SuccessorRepresentationReasonableAgent(BaseAgent):
             expected_reward = 0.0
             
             # Only consider swap probabilities if we have both rewards
-            if len(sorted_rewards) == 2:
-                P_swap = self._estimate_swap_probability(
-                    state, next_pos, sorted_rewards, current_step
-                )
-                high_pos, high_val = sorted_rewards[0]
-                low_pos, low_val = sorted_rewards[1]
-
-                # If next_pos is on the shortest-path to high_pos:
+            if len(sorted_rewards) == 2 and self.swap_prob is not None:
+                (high_pos, high_val), (low_pos, low_val) = sorted_rewards
+                dist_high = self.bfs_shortest_dist(state.grid, next_pos, high_pos)
+                dist_low = self.bfs_shortest_dist(state.grid, next_pos, low_pos)
+                exp_val_high, exp_val_low = self.expected_value_with_swap(dist_high, dist_low, high_val, low_val, self.swap_prob)
                 if self._is_on_path(next_pos, high_pos, state.grid):
-                    expected_reward = (1 - P_swap) * high_val + P_swap * low_val
-                # Else if next_pos is on path to low_pos first:
+                    expected_reward = exp_val_high
                 elif self._is_on_path(next_pos, low_pos, state.grid):
-                    expected_reward = (1 - P_swap) * low_val + P_swap * high_val
+                    expected_reward = exp_val_low
             # If only one reward left, no need for swap probability
             elif len(sorted_rewards) == 1:
                 reward_pos, reward_val = sorted_rewards[0]
@@ -163,9 +159,9 @@ class SuccessorRepresentationReasonableAgent(BaseAgent):
         Check if `pos` lies on any shortest path from start to `goal`.
         E.g., by BFS reconstructing a path or checking dist(start,pos)+dist(pos,goal) == dist(start,goal).
         """
-        d_start_goal = self._bfs_dist(self.prev_state or pos, goal, grid)   # if prev_state is None, use pos
-        d_start_pos  = self._bfs_dist(self.prev_state or pos, pos, grid)
-        d_pos_goal   = self._bfs_dist(pos, goal, grid)
+        d_start_goal = self.bfs_shortest_dist(grid, self.prev_state or pos, goal)
+        d_start_pos  = self.bfs_shortest_dist(grid, self.prev_state or pos, pos)
+        d_pos_goal   = self.bfs_shortest_dist(grid, pos, goal)
         return d_start_pos + d_pos_goal == d_start_goal
 
     def _estimate_swap_probability(

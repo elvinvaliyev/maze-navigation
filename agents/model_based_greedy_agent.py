@@ -16,26 +16,32 @@ class ModelBasedGreedyAgent(BaseAgent):
         self.step_budget = step_budget
 
     def select_action(self, state) -> str:
-        # You could inspect remaining steps like this (but we ignore it):
-        # remaining = state.max_steps - state.step_count
-
-        # 1) Pick the position with the highest current reward value
         rewards: Dict[Tuple[int,int], int] = state.get_reward_positions()
-        if rewards:
-            # target the highest-value one
-            target = max(rewards.items(), key=lambda kv: kv[1])[0]
+        current_pos = state.get_position()
+        exit_pos = state.exit
+        grid = state.grid
+        steps_remaining = state.max_steps - state.step_count
+
+        if not rewards:
+            target = exit_pos
         else:
-            # no rewards left: head for exit
-            target = state.exit
+            if len(rewards) == 2 and self.swap_prob is not None:
+                reward_items = list(rewards.items())
+                (pos1, val1), (pos2, val2) = reward_items
+                dist1 = self.bfs_shortest_dist(grid, current_pos, pos1)
+                dist2 = self.bfs_shortest_dist(grid, current_pos, pos2)
+                exp_val1, exp_val2 = self.expected_value_with_swap(dist1, dist2, val1, val2, self.swap_prob)
+                if exp_val1 >= exp_val2:
+                    target = pos1
+                else:
+                    target = pos2
+            else:
+                target = max(rewards.items(), key=lambda kv: kv[1])[0]
 
-        # 2) Plan a shortest path there via BFS
-        path = self._bfs(state.grid, state.get_position(), target)
+        path = self.bfs_shortest_path(grid, current_pos, target)
         if len(path) < 2:
-            # stuck or already there: just pick a legal move
             return state.available_actions()[0]
-
-        # 3) Convert the first step of that path into an action
-        return self._delta_to_action(state.get_position(), path[1])
+        return self._delta_to_action(current_pos, path[1])
 
     def update(self, state, action, reward, next_state) -> None:
         # Greedy agent doesn't learn

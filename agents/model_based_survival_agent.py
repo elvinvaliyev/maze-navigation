@@ -21,37 +21,39 @@ class ModelBasedSurvivalAgent(BaseAgent):
         uncol = {p:v for p,v in all_rewards.items()
                  if p not in getattr(state, 'collected', set())}
 
-        def bfs(start, goal):
-            rows, cols = len(state.grid), len(state.grid[0])
-            moves = [(-1,0),(1,0),(0,-1),(0,1)]
-            visited = {start}
-            queue = deque([[start]])
-            while queue:
-                path = queue.popleft()
-                if path[-1] == goal:
-                    return path
-                r, c = path[-1]
-                for dr, dc in moves:
-                    nr, nc = r+dr, c+dc
-                    if (0 <= nr < rows and 0 <= nc < cols and
-                        state.grid[nr][nc] == 0 and (nr,nc) not in visited):
-                        visited.add((nr,nc))
-                        queue.append(path + [(nr,nc)])
-            return []
+        grid = state.grid
+        current_pos = state.get_position()
+        exit_pos = state.exit
 
-        target = state.exit
+        target = exit_pos
         if uncol:
-            rp, _ = max(uncol.items(), key=lambda kv: kv[1])
-            path1 = bfs(state.get_position(), rp)
-            path2 = bfs(rp, state.exit)
-            if path1 and path2 and (len(path1)-1 + len(path2)-1) <= remaining:
-                target = rp
+            if len(uncol) == 2 and self.swap_prob is not None:
+                reward_items = list(uncol.items())
+                (pos1, val1), (pos2, val2) = reward_items
+                dist1 = self.bfs_shortest_dist(grid, current_pos, pos1)
+                dist2 = self.bfs_shortest_dist(grid, current_pos, pos2)
+                exp_val1, exp_val2 = self.expected_value_with_swap(dist1, dist2, val1, val2, self.swap_prob)
+                # Only detour for a reward if can reach it and then exit in time
+                path1 = self.bfs_shortest_path(grid, current_pos, pos1)
+                path2 = self.bfs_shortest_path(grid, pos1, exit_pos)
+                path3 = self.bfs_shortest_path(grid, current_pos, pos2)
+                path4 = self.bfs_shortest_path(grid, pos2, exit_pos)
+                if path1 and path2 and (len(path1)-1 + len(path2)-1) <= remaining and exp_val1 >= exp_val2:
+                    target = pos1
+                elif path3 and path4 and (len(path3)-1 + len(path4)-1) <= remaining:
+                    target = pos2
+            else:
+                rp, _ = max(uncol.items(), key=lambda kv: kv[1])
+                path1 = self.bfs_shortest_path(grid, current_pos, rp)
+                path2 = self.bfs_shortest_path(grid, rp, exit_pos)
+                if path1 and path2 and (len(path1)-1 + len(path2)-1) <= remaining:
+                    target = rp
 
-        path = bfs(state.get_position(), target)
+        path = self.bfs_shortest_path(grid, current_pos, target)
         if len(path) < 2:
             return state.available_actions()[0]
         nxt = path[1]
-        dr, dc = nxt[0]-state.get_position()[0], nxt[1]-state.get_position()[1]
+        dr, dc = nxt[0]-current_pos[0], nxt[1]-current_pos[1]
         return {(-1,0):'up',(1,0):'down',(0,-1):'left',(0,1):'right'}[(dr,dc)]
 
     def update(self, state, action, reward, next_state) -> None:
