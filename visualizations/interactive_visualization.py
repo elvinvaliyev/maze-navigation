@@ -55,7 +55,7 @@ def run_interactive(env, agent, pause=0.2):
         action = agent.select_action(env)
         ns, rew, done = env.step(action)
         agent.add_reward(rew)
-        agent.update(env, action, rew, ns)
+        agent.update(env, action, rew, env)  # Pass env instead of ns (position tuple)
         agent.set_position(ns)
 
         if done:

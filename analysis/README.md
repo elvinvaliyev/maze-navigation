@@ -1,261 +1,152 @@
-# Maze Navigation Analysis Package
+# Analysis Package for Maze Navigation Experiments
 
-This package provides comprehensive analysis tools for maze navigation experiments, comparing different agent types across various experimental conditions.
+This package provides comprehensive analysis capabilities for maze navigation experiments, including statistical analysis, performance metrics, comparative analysis, and visualization generation.
 
 ## Overview
 
 The analysis package consists of four main modules:
 
-1. **Visualization Engine** (`visualization_engine.py`) - Creates comprehensive visualizations
-2. **Statistical Analysis** (`statistical_analysis.py`) - Performs statistical tests and analysis
-3. **Performance Metrics** (`performance_metrics.py`) - Calculates advanced performance metrics
-4. **Comparative Analysis** (`comparative_analysis.py`) - Compares agents across different dimensions
+1. **StatisticalAnalyzer** - Statistical significance testing and effect size analysis
+2. **PerformanceAnalyzer** - Performance metrics and efficiency calculations
+3. **ComparativeAnalyzer** - Agent and environment comparisons
+4. **VisualizationEngine** - Comprehensive visualization generation
 
-## Quick Start
+## Modules
 
-To run the complete analysis:
+### StatisticalAnalyzer
 
-```bash
-cd analysis
-python run_comprehensive_analysis.py
-```
+Provides statistical analysis capabilities including:
 
-This will generate:
-- 8 comprehensive visualization plots
-- Detailed statistical analysis
-- Performance rankings and metrics
-- Agent comparison reports
-- A summary report
+- **Agent Performance Comparison**: ANOVA and pairwise t-tests
+- **Effect Size Analysis**: Cohen's d calculations
+- **Confidence Intervals**: 95% confidence intervals for agent performance
+- **Comprehensive Reports**: Detailed statistical summaries
 
-## Module Details
+**Key Methods:**
+- `agent_performance_comparison()` - Compare agents using statistical tests
+- `effect_size_analysis()` - Calculate effect sizes for comparisons
+- `confidence_intervals()` - Generate confidence intervals
+- `generate_comprehensive_report()` - Full statistical analysis
 
-### 1. Visualization Engine
+### PerformanceAnalyzer
 
-**File:** `visualization_engine.py`
+Analyzes performance metrics and efficiency:
 
-**Purpose:** Creates comprehensive visualizations of experimental results
+- **Efficiency Metrics**: Reward per step, collection rate, survival efficiency
+- **Agent Rankings**: Performance rankings across different metrics
+- **Environment Analysis**: Performance across mazes, reward configs, swap probabilities
+- **Learning Curve Analysis**: Learning improvement patterns
 
-**Key Features:**
-- Comprehensive dashboard with all metrics
-- Swap probability impact analysis
-- Reward configuration analysis
-- Agent comparison radar charts
-- Statistical significance plots
-- Maze complexity analysis
-- Performance trend analysis
+**Key Methods:**
+- `calculate_efficiency_metrics()` - Calculate various efficiency metrics
+- `agent_rankings()` - Generate performance rankings
+- `environment_analysis()` - Analyze performance across environments
+- `learning_curve_analysis()` - Analyze learning patterns
 
-**Usage:**
+### ComparativeAnalyzer
+
+Provides detailed comparisons between agents and environments:
+
+- **Comparison Matrix**: Comprehensive agent comparison matrix
+- **Environment Comparison**: Performance across different environments
+- **Agent-Environment Interactions**: How agents perform in different conditions
+- **Best/Worst Conditions**: Optimal and challenging conditions for each agent
+
+**Key Methods:**
+- `agent_comparison_matrix()` - Create comparison matrix
+- `environment_comparison()` - Compare performance across environments
+- `agent_environment_interaction()` - Analyze interactions
+- `best_performing_conditions()` - Find optimal conditions
+
+### VisualizationEngine
+
+Generates comprehensive visualizations:
+
+- **Agent Performance Plots**: Box plots and comparison charts
+- **Environment Analysis**: Performance across different environments
+- **Heatmap Visualizations**: Agent-environment interaction heatmaps
+- **Learning Curves**: Learning improvement visualizations
+- **Statistical Summary Plots**: Confidence intervals and error bars
+
+**Key Methods:**
+- `create_agent_performance_plot()` - Agent performance visualizations
+- `create_environment_analysis_plots()` - Environment analysis plots
+- `create_heatmap_visualizations()` - Heatmap generation
+- `create_learning_curves()` - Learning curve plots
+- `generate_all_visualizations()` - Generate all visualization types
+
+## Usage
+
+### Basic Usage
+
 ```python
-from visualization_engine import VisualizationEngine
+from analysis import StatisticalAnalyzer, PerformanceAnalyzer, ComparativeAnalyzer, VisualizationEngine
+
+# Load and analyze results
+stat_analyzer = StatisticalAnalyzer()
+stat_results = stat_analyzer.generate_comprehensive_report()
+
+perf_analyzer = PerformanceAnalyzer()
+perf_results = perf_analyzer.generate_comprehensive_performance_report()
+
+comp_analyzer = ComparativeAnalyzer()
+comp_results = comp_analyzer.generate_comprehensive_comparison_report()
 
 viz_engine = VisualizationEngine()
 viz_engine.generate_all_visualizations()
 ```
 
-**Generated Files:**
-- `comprehensive_dashboard.png` - Main dashboard with all metrics
-- `swap_probability_analysis.png` - Impact of swap probabilities
-- `reward_configuration_analysis.png` - Performance by reward config
-- `agent_radar_comparison.png` - Radar chart comparison
-- `statistical_significance.png` - Statistical significance heatmaps
-- `maze_complexity_analysis.png` - Performance by maze complexity
-- `performance_trends.png` - Trend analysis across conditions
-- `comparative_analysis.png` - Comparative visualizations
+### Advanced Usage
 
-### 2. Statistical Analysis
-
-**File:** `statistical_analysis.py`
-
-**Purpose:** Performs comprehensive statistical analysis
-
-**Key Features:**
-- Descriptive statistics for all metrics
-- One-way ANOVA analysis
-- Post-hoc Tukey HSD tests
-- Effect size calculations (Cohen's d)
-- Correlation analysis
-- Confidence intervals
-- Swap probability effect analysis
-
-**Usage:**
 ```python
-from statistical_analysis import StatisticalAnalyzer
+# Custom statistical analysis
+stat_analyzer = StatisticalAnalyzer()
+comparisons = stat_analyzer.agent_performance_comparison()
+effect_sizes = stat_analyzer.effect_size_analysis()
 
-analyzer = StatisticalAnalyzer()
-results = analyzer.generate_comprehensive_report()
-```
+# Custom performance analysis
+perf_analyzer = PerformanceAnalyzer()
+efficiency = perf_analyzer.calculate_efficiency_metrics()
+rankings = perf_analyzer.agent_rankings()
 
-**Output:**
-- Detailed statistical tables
-- Significance testing results
-- Effect size interpretations
-- Correlation matrices
+# Custom comparative analysis
+comp_analyzer = ComparativeAnalyzer()
+matrix = comp_analyzer.agent_comparison_matrix()
+interactions = comp_analyzer.agent_environment_interaction()
 
-### 3. Performance Metrics
-
-**File:** `performance_metrics.py`
-
-**Purpose:** Calculates advanced performance metrics and rankings
-
-**Key Features:**
-- Composite performance scores
-- Performance stability analysis
-- Risk-adjusted metrics (Sharpe, Sortino, Calmar ratios)
-- Agent specialization analysis
-- Efficiency calculations
-- Performance rankings
-- Trend analysis
-
-**Usage:**
-```python
-from performance_metrics import PerformanceAnalyzer
-
-analyzer = PerformanceAnalyzer()
-results = analyzer.generate_comprehensive_performance_report()
-```
-
-**Output:**
-- Performance rankings across all metrics
-- Risk-adjusted performance measures
-- Efficiency metrics
-- Stability analysis
-- Specialization profiles
-
-### 4. Comparative Analysis
-
-**File:** `comparative_analysis.py`
-
-**Purpose:** Compares agents across different dimensions and conditions
-
-**Key Features:**
-- Agent-to-agent comparison matrices
-- Strengths and weaknesses identification
-- Condition-specific performance analysis
-- Detailed performance profiles
-- Agent recommendation system
-- Comparative visualizations
-
-**Usage:**
-```python
-from comparative_analysis import ComparativeAnalyzer
-
-analyzer = ComparativeAnalyzer()
-results = analyzer.generate_comprehensive_comparison_report()
-```
-
-**Output:**
-- Pairwise agent comparisons
-- Agent strengths/weaknesses
-- Performance under different conditions
-- Usage recommendations
-
-## Data Requirements
-
-The analysis expects a CSV file named `comprehensive_results.csv` in the parent directory with the following columns:
-
-- `agent` - Agent type (Model-Based Greedy, Model-Based Survival, SR-Greedy, SR-Reasonable)
-- `maze` - Maze configuration name
-- `reward_config` - Reward configuration description
-- `swap_prob` - Swap probability value
-- `avg_reward` - Average reward collected
-- `exit_rate` - Rate of successful exits
-- `survival_rate` - Rate of survival
-- `avg_risk_adjusted_return` - Risk-adjusted return metric
-- `avg_path_efficiency` - Path efficiency metric
-- `avg_steps` - Average number of steps taken
-
-## Output Structure
-
-```
-analysis/
-├── __init__.py
-├── README.md
-├── run_comprehensive_analysis.py
-├── visualization_engine.py
-├── statistical_analysis.py
-├── performance_metrics.py
-├── comparative_analysis.py
-├── comprehensive_dashboard.png
-├── swap_probability_analysis.png
-├── reward_configuration_analysis.png
-├── agent_radar_comparison.png
-├── statistical_significance.png
-├── maze_complexity_analysis.png
-├── performance_trends.png
-├── comparative_analysis.png
-├── reports/
-│   └── comprehensive_summary_report.txt
-├── visualizations/
-└── tables/
-```
-
-## Key Metrics Analyzed
-
-1. **Average Reward** - Total reward collected per episode
-2. **Exit Rate** - Percentage of episodes ending in successful exit
-3. **Survival Rate** - Percentage of episodes ending in survival (not death)
-4. **Risk-Adjusted Return** - Reward adjusted for risk and uncertainty
-5. **Path Efficiency** - Efficiency of navigation path taken
-
-## Statistical Tests Performed
-
-- **ANOVA** - Tests for significant differences between agents
-- **Tukey HSD** - Post-hoc pairwise comparisons
-- **Effect Sizes** - Cohen's d for practical significance
-- **Correlation Analysis** - Relationships between metrics
-- **Confidence Intervals** - Uncertainty quantification
-
-## Performance Metrics Calculated
-
-- **Composite Scores** - Weighted combination of all metrics
-- **Risk-Adjusted Ratios** - Sharpe, Sortino, Calmar ratios
-- **Efficiency Metrics** - Performance per step
-- **Stability Measures** - Coefficient of variation, IQR
-- **Specialization Profiles** - Agent strengths and weaknesses
-
-## Agent Types Analyzed
-
-1. **Model-Based Greedy** - Greedy agent with model-based planning
-2. **Model-Based Survival** - Survival-focused agent with model-based planning
-3. **SR-Greedy** - Greedy agent using successor representations
-4. **SR-Reasonable** - Balanced agent using successor representations
-
-## Experimental Conditions
-
-- **Maze Configurations** - Different maze layouts and complexities
-- **Reward Configurations** - Various reward structures (big difference, small difference, equal)
-- **Swap Probabilities** - Different probabilities of reward swapping
-- **Episode Counts** - Multiple episodes for statistical power
-
-## Usage Examples
-
-### Run Complete Analysis
-```bash
-python run_comprehensive_analysis.py
-```
-
-### Run Individual Modules
-```python
-# Just visualizations
-from visualization_engine import VisualizationEngine
+# Custom visualizations
 viz_engine = VisualizationEngine()
-viz_engine.create_comprehensive_dashboard()
-
-# Just statistical analysis
-from statistical_analysis import StatisticalAnalyzer
-analyzer = StatisticalAnalyzer()
-analyzer.perform_anova_analysis()
-
-# Just performance metrics
-from performance_metrics import PerformanceAnalyzer
-analyzer = PerformanceAnalyzer()
-analyzer.calculate_composite_score()
-
-# Just comparative analysis
-from comparative_analysis import ComparativeAnalyzer
-analyzer = ComparativeAnalyzer()
-analyzer.analyze_agent_strengths_weaknesses()
+viz_engine.create_agent_performance_plot()
+viz_engine.create_heatmap_visualizations()
 ```
+
+## Output Files
+
+The analysis package generates various output files:
+
+### Statistical Analysis
+- Statistical significance reports
+- Effect size calculations
+- Confidence interval summaries
+
+### Performance Analysis
+- Efficiency metrics reports
+- Agent ranking summaries
+- Environment performance analysis
+
+### Comparative Analysis
+- Agent comparison matrices
+- Environment comparison reports
+- Best/worst condition summaries
+
+### Visualizations
+- `agent_performance_comparison.png` - Agent performance box plots
+- `maze_performance_analysis.png` - Maze performance analysis
+- `reward_config_performance.png` - Reward configuration analysis
+- `agent_maze_heatmap.png` - Agent-maze interaction heatmap
+- `agent_reward_heatmap.png` - Agent-reward interaction heatmap
+- `learning_curves.png` - Learning improvement curves
+- `statistical_summary.png` - Statistical summary plots
 
 ## Dependencies
 
@@ -267,23 +158,7 @@ analyzer.analyze_agent_strengths_weaknesses()
 
 ## Notes
 
-- All visualizations are saved as high-resolution PNG files (300 DPI)
-- Statistical analysis includes significance levels (*** p<0.001, ** p<0.01, * p<0.05)
-- Performance metrics are normalized for fair comparison
-- Analysis handles missing data gracefully
-- Results are both printed to console and saved to files
-
-## Troubleshooting
-
-1. **Import Errors**: Ensure you're running from the correct directory
-2. **File Not Found**: Check that `comprehensive_results.csv` exists in parent directory
-3. **Memory Issues**: For large datasets, consider running modules individually
-4. **Visualization Errors**: Ensure matplotlib backend is properly configured
-
-## Contributing
-
-To add new analysis features:
-1. Create new module in the analysis package
-2. Update `__init__.py` to include new module
-3. Add new functionality to `run_comprehensive_analysis.py`
-4. Update this README with new features 
+- All analysis modules expect results in CSV format from the main experiment runner
+- Visualizations are saved as high-resolution PNG files (300 DPI)
+- Statistical tests use α = 0.05 significance level by default
+- Effect sizes are interpreted using Cohen's d guidelines (small: <0.2, medium: 0.2-0.5, large: >0.5) 

@@ -101,6 +101,8 @@ class MazeEnvironment:
         self.step_count = 0
         self.reward_positions = {pos:val for pos,val in self.initial_rewards}
         self.collected = set()
+        # Track previous distance to exit for bonus
+        self.prev_dist_to_exit = self._bfs_dist(self.agent_pos, self.exit)
         return self.agent_pos
 
     def get_position(self) -> Tuple[int,int]:
@@ -134,6 +136,33 @@ class MazeEnvironment:
 
         # 6) done if exit or budget exhausted
         done = (self.agent_pos == self.exit) or (self.step_count >= self.max_steps)
+
+        # Add exit reward if agent reaches exit successfully
+        exit_reward = 50  # Significant reward for survival
+        if self.agent_pos == self.exit:
+            reward += exit_reward
+
+        # Add late exit penalty if agent reaches exit inefficiently
+        late_exit_penalty = -5
+        if self.agent_pos == self.exit and self.step_count > int(self.max_steps * 0.9):
+            reward += late_exit_penalty
+
+        # Add near-exit bonus if agent is close to exit and close to deadline
+        exit_r, exit_c = self.exit
+        near_exit_cells = [
+            (exit_r-1, exit_c), (exit_r+1, exit_c),
+            (exit_r, exit_c-1), (exit_r, exit_c+1)
+        ]
+        near_exit_bonus = 2
+        if self.agent_pos in near_exit_cells and self.step_count > int(self.max_steps * 0.8):
+            reward += near_exit_bonus
+
+        # Add bonus for getting closer to exit
+        curr_dist_to_exit = self._bfs_dist(self.agent_pos, self.exit)
+        if curr_dist_to_exit < self.prev_dist_to_exit:
+            reward += 0.5  # Bonus for moving closer
+        self.prev_dist_to_exit = curr_dist_to_exit
+
         return self.agent_pos, reward, done
 
     def _maybe_swap(self):

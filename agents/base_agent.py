@@ -11,6 +11,10 @@ class BaseAgent(ABC):
         self.total_reward: float = 0.0
         self.swap_prob = None
         self.swap_steps = None
+        # Swap learning additions
+        self.observed_swap_steps = []  # List of lists: each episode's swap steps
+        self.swap_histogram = {}       # step -> count
+        self.swap_histogram_total = 0  # total swaps observed
 
     def set_position(self, pos: Tuple[int, int]) -> None:
         self.position = pos
@@ -94,3 +98,28 @@ class BaseAgent(ABC):
                     seen.add((nr,nc))
                     q.append((nr,nc,d+1))
         return float('inf')
+
+    # --- Swap learning additions ---
+    def record_swap(self, step: int):
+        """Call this when a swap is observed at a given step."""
+        if not self.observed_swap_steps or self.observed_swap_steps[-1] is None:
+            self.observed_swap_steps.append([])
+        self.observed_swap_steps[-1].append(step)
+        self.swap_histogram[step] = self.swap_histogram.get(step, 0) + 1
+        self.swap_histogram_total += 1
+
+    def start_new_episode(self):
+        """Call at the start of each episode to track swaps."""
+        self.observed_swap_steps.append([])
+
+    def end_episode_swap_tracking(self):
+        """Call at the end of each episode to finalize swap tracking."""
+        if self.observed_swap_steps and self.observed_swap_steps[-1] == []:
+            self.observed_swap_steps[-1] = None  # Mark as no swaps
+
+    def estimated_swap_likelihood(self, step: int) -> float:
+        """Estimate likelihood of swap at a given step based on observed data."""
+        if self.swap_histogram_total < 10:
+            # Not enough data, fall back to global probability
+            return self.swap_prob if self.swap_prob is not None else 0.0
+        return self.swap_histogram.get(step, 0) / self.swap_histogram_total

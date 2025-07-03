@@ -1,15 +1,25 @@
 """
-Comprehensive Analysis Package for Maze Navigation Experiments
+Analysis package for maze navigation experiments.
 
-This package contains various analysis tools and visualizations for
-comparing agent performance across different maze configurations,
-reward structures, and swap probabilities.
+This package contains modules for:
+- Statistical analysis of agent performance
+- Performance metrics calculation
+- Comparative analysis between agents
+- Visualization generation
 """
 
-from .visualization_engine import *
-from .statistical_analysis import *
-from .performance_metrics import *
-from .comparative_analysis import *
-
 __version__ = "1.0.0"
-__author__ = "Maze Navigation Research Team" 
+__author__ = "Maze Navigation Team"
+
+# Import main analysis classes
+from .statistical_analysis import StatisticalAnalyzer
+from .performance_metrics import PerformanceAnalyzer
+from .comparative_analysis import ComparativeAnalyzer
+from .visualization_engine import VisualizationEngine
+
+__all__ = [
+    'StatisticalAnalyzer',
+    'PerformanceAnalyzer', 
+    'ComparativeAnalyzer',
+    'VisualizationEngine'
+] 
