@@ -5,6 +5,7 @@ import numpy as np
 from agents.base_agent import BaseAgent
 
 class ModelBasedGreedyAgent(BaseAgent):
+    
     """
     Enhanced Greedy agent with learning capabilities:
       - Knows the full maze (grid, start/exit)

@@ -100,10 +100,10 @@ if __name__ == "__main__":
 
     # Choose exactly one agent to run:
     # 1) Impulsive Greedy (ignores budget):
-    agent = ModelBasedGreedyAgent(step_budget=env.max_steps)
+    #agent = ModelBasedGreedyAgent(step_budget=env.max_steps)
 
     # 2) Survival-Aware (won't die if it can avoid it):
-    #agent = ModelBasedSurvivalAgent(env.max_steps)
+    agent = ModelBasedSurvivalAgent(env.max_steps)
 
     # 3) SR-Greedy (learns successor representation online, then acts greedily):
     #agent = SuccessorRepresentationGreedyAgent(alpha=0.1)

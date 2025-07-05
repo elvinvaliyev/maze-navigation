@@ -12,7 +12,6 @@ class SuccessorRepresentationGreedyAgent(BaseAgent):
     Uses maze layout to pre-compute initial SR values.
     Now includes learning tracking and performance monitoring.
     """
-
     def __init__(self, alpha: float = 0.5, exploration_rate: float = 0.3, exploration_decay: float = 0.995):
         super().__init__()
         self.alpha = alpha                    # SR learning rate
