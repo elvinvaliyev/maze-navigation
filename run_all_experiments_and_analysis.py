@@ -49,11 +49,11 @@ class UnifiedExperimentAnalyzer:
         }
         
         # Load maze configurations
-        self.maze_configs = [cfg for cfg in self._load_mazes() if cfg['name'] != 'maze4']
+        self.maze_configs = [cfg for cfg in self._load_mazes() if cfg['name'] == 'maze5']
         
         # Experiment conditions
         self.swap_probabilities = [0.0, 0.1, 0.3, 0.5, 0.7, 1.0]
-        self.episodes_per_condition = 100  
+        self.episodes_per_condition = 200  
         
         # Enhanced reward configurations
         self.reward_configs = [
@@ -99,8 +99,7 @@ class UnifiedExperimentAnalyzer:
             rewards=[(tuple(reward_positions[0]), high_val), (tuple(reward_positions[1]), low_val)],
             swap_prob=swap_prob
         )
-    
-    def run_single_episode(self, agent, env, episode_num: int, condition_key: str) -> Dict:
+    def run_single_episode(self, agent, env, episode_num: int, condition_key: str, maze_name: str) -> Dict:
         """Run a single episode with specified conditions and track learning."""
         # Run episode
         env.reset()
@@ -141,14 +140,19 @@ class UnifiedExperimentAnalyzer:
         success = env.get_position() == env.exit
         survival = steps < env.max_steps  # Survived if didn't run out of steps
         
-        # Death analysis
+                # Death analysis
         death_reason = None
         if not success:
             if steps >= env.max_steps:
                 death_reason = 'timeout'
             else:
                 death_reason = 'other'
-        
+
+        if death_reason:
+            death_point = env.get_position()
+            with open("death_points.csv", "a") as f:
+                f.write(f"{agent.__class__.__name__},{maze_name},{episode_num},{death_point[0]},{death_point[1]},{death_reason}\n")
+
         # Risk-adjusted return (simplified)
         risk_adjusted_return = total_reward / max(steps, 1) if survival else 0
         
@@ -230,7 +234,9 @@ class UnifiedExperimentAnalyzer:
                         condition_key = f"{agent_name}_{maze_config['name']}_{reward_name}_{swap_prob}"
                         
                         for episode in range(self.episodes_per_condition):
-                            result = self.run_single_episode(agent, env, episode, condition_key)
+                           
+                            result = self.run_single_episode(agent, env, episode, condition_key, maze_config['name'])
+
                             
                             # Call end_episode for adaptive risk aversion
                             if hasattr(agent, 'end_episode'):

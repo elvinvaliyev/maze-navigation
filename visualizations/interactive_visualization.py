@@ -101,9 +101,9 @@ def run_interactive(env, agent, pause=0.2):
             print("⚠️ Agent ran out of moves before reaching the exit.")
 
 if __name__ == "__main__":
-    cfg = os.path.join(project_root, "environments", "maze_configs", "maze6.json")
-    env = MazeEnvironment.from_json(cfg)
-
+    cfg = os.path.join(project_root, "environments", "maze_configs", "maze5.json")
+env = MazeEnvironment.from_json(cfg)
+print("Auto-computed step budget:", env.max_steps)
 # 🔧 Adjust step budget for fork-style mazes (like maze5)
 
 start = env.start
@@ -116,7 +116,7 @@ if len(reward_positions) >= 1:
     tight_budget = len(to_reward) + len(reward_to_exit) + 1
     buffer = 6  # Add a small buffer to allow flexibility (e.g., visiting rewards)
     env.max_steps = tight_budget + buffer
-    print("Auto-computed step budget:", env.max_steps)
+    print(f"✅ Adjusted tight step budget: {env.max_steps}")
 
     # schedule a swap at the decision fork
     env.swap_steps = schedule_fork_swap(
@@ -133,7 +133,7 @@ if len(reward_positions) >= 1:
     #agent = ModelBasedGreedyAgent(step_budget=env.max_steps)
 
     # 2) Survival-Aware (won't die if it can avoid it):
-    agent = ModelBasedSurvivalAgent(env.max_steps)
+    #agent = ModelBasedSurvivalAgent(env.max_steps)
 
     # 3) SR-Greedy (learns successor representation online, then acts greedily):
     #agent = SuccessorRepresentationGreedyAgent(alpha=0.1)
