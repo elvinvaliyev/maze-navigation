@@ -36,6 +36,9 @@ class UnifiedExperimentAnalyzer:
     """Runs experiments and analyzes results in one unified class."""
     
     def __init__(self):
+        self.results_dir = os.path.join(os.path.dirname(__file__), 'results')
+        if not os.path.exists(self.results_dir):
+            os.makedirs(self.results_dir)
         self.results = []
         self.learning_progress = defaultdict(list)  # Track learning over time
         self.learning_transfer = defaultdict(dict)  # Track learning transfer between mazes
@@ -142,16 +145,18 @@ class UnifiedExperimentAnalyzer:
         
                 # Death analysis
         death_reason = None
+        death_x = None
+        death_y = None
         if not success:
             if steps >= env.max_steps:
                 death_reason = 'timeout'
             else:
                 death_reason = 'other'
-
-        if death_reason:
-            death_point = env.get_position()
-            with open("death_points.csv", "a") as f:
-                f.write(f"{agent.__class__.__name__},{maze_name},{episode_num},{death_point[0]},{death_point[1]},{death_reason}\n")
+            
+            if death_reason:
+                death_point = env.get_position()
+                death_x = death_point[0]
+                death_y = death_point[1]
 
         # Risk-adjusted return (simplified)
         risk_adjusted_return = total_reward / max(steps, 1) if survival else 0
@@ -188,6 +193,8 @@ class UnifiedExperimentAnalyzer:
             'episode_num': episode_num,
             'path_length': len(path),
             'death_reason': death_reason,
+            'death_x': death_x,
+            'death_y': death_y,
             'swap_accuracy': swap_accuracy
         }
     
@@ -276,6 +283,23 @@ class UnifiedExperimentAnalyzer:
                         else:
                             learning_improvement = 0
                         
+                        # Calculate death point statistics
+                        death_results = [r for r in condition_results if r['death_reason'] is not None]
+                        death_count = len(death_results)
+                        
+                        # Get most common death location if any deaths occurred
+                        death_x = None
+                        death_y = None
+                        death_reason = None
+                        if death_count > 0:
+                            # Find the most common death location
+                            death_locations = [(r['death_x'], r['death_y']) for r in death_results if r['death_x'] is not None]
+                            if death_locations:
+                                from collections import Counter
+                                most_common_location = Counter(death_locations).most_common(1)[0][0]
+                                death_x, death_y = most_common_location
+                                death_reason = death_results[0]['death_reason']  # Use first death reason
+                        
                         # Add summary result
                         summary_result = {
                             'agent': agent_name,
@@ -292,7 +316,11 @@ class UnifiedExperimentAnalyzer:
                             'avg_steps': avg_steps,
                             'avg_collected_rewards': avg_collected,
                             'learning_improvement': learning_improvement,
-                            'episodes': self.episodes_per_condition
+                            'episodes': self.episodes_per_condition,
+                            'death_count': death_count,
+                            'death_x': death_x,
+                            'death_y': death_y,
+                            'death_reason': death_reason
                         }
                         
                         self.results.append(summary_result)
@@ -402,37 +430,19 @@ class UnifiedExperimentAnalyzer:
                     sr_growth = after_knowledge['sr_entries'] - initial_knowledge['sr_entries']
                     print(f"    SR entries growth: {sr_growth}")
     
-    def save_results(self, output_file: str = "comprehensive_results.csv"):
-        """Save results to CSV file."""
-        # Ensure output directory exists
-        output_dir = os.path.dirname(output_file)
-        if output_dir and not os.path.exists(output_dir):
-            os.makedirs(output_dir)
+    def save_results(self, output_file: str = None):
+        """Save results to the results directory."""
+        if output_file is None:
+            output_file = os.path.join(self.results_dir, 'comprehensive_results.csv')
         df = pd.DataFrame(self.results)
-        df.to_csv(os.path.join(output_dir, output_file), index=False)
-        print(f"\nResults saved to {os.path.join(output_dir, output_file)}")
-        print(f"Shape: {df.shape}")
-        
-        # Print summary statistics
-        print("\nSummary Statistics:")
-        print(f"Total conditions tested: {len(self.results)}")
-        print(f"Average reward across all conditions: {df['avg_reward'].mean():.2f}")
-        print(f"Average exit rate: {df['exit_rate'].mean():.2%}")
-        print(f"Average survival rate: {df['survival_rate'].mean():.2%}")
-        print(f"Average learning improvement: {df['learning_improvement'].mean():.2f}")
-        print(f"Average collected rewards: {df['avg_collected_rewards'].mean():.2f}")
-        
-        # Statistical significance testing
-        self._run_statistical_tests(df)
-        
-        return df
+        df.to_csv(output_file, index=False)
+        print(f"Saved results to {output_file}")
+        return output_file
     
     def create_learning_visualizations(self):
-        """Create learning progress visualizations."""
+        """Create learning progress visualizations and save in results dir."""
         print("\nCreating learning progress visualizations...")
-        
-        # Ensure output directory exists for plots
-        output_dir = os.path.join(os.path.dirname(__file__), 'analysis')
+        output_dir = self.results_dir
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
         
@@ -502,6 +512,9 @@ class UnifiedExperimentAnalyzer:
         # Create risk threshold evolution plot for adaptive agents
         self._create_risk_threshold_plot()
         
+        # Generate death point heatmaps
+        self._create_death_point_heatmaps()
+        
         print("Learning visualizations created!")
     
     def _create_risk_threshold_plot(self):
@@ -515,8 +528,124 @@ class UnifiedExperimentAnalyzer:
         plt.ylabel('Risk Threshold')
         plt.legend()
         plt.grid(True)
-        plt.savefig(os.path.join(os.path.dirname(__file__), 'analysis', 'risk_threshold_evolution.png'), dpi=300, bbox_inches='tight')
+        plt.savefig(os.path.join(self.results_dir, 'risk_threshold_evolution.png'), dpi=300, bbox_inches='tight')
         plt.close()
+    
+    def _create_death_point_heatmaps(self):
+        """Create death point heatmaps with maze backgrounds for all mazes."""
+        print("\nCreating death point heatmaps...")
+        
+        # Import required modules
+        import json
+        import glob
+        
+        # Set paths
+        maze_configs_dir = os.path.join(os.path.dirname(__file__), 'environments', 'maze_configs')
+        
+        # Get all maze configs
+        maze_config_files = glob.glob(os.path.join(maze_configs_dir, '*.json'))
+        print(f"Found {len(maze_config_files)} maze configurations")
+        
+        for maze_config_file in maze_config_files:
+            maze_name = os.path.basename(maze_config_file).replace('.json', '')
+            print(f"  Processing {maze_name}...")
+            
+            # Load maze config
+            with open(maze_config_file, 'r') as f:
+                maze_config = json.load(f)
+            
+            maze_layout = np.array(maze_config['grid'])
+            maze_height, maze_width = maze_layout.shape
+            
+            # Filter results for this maze and only rows with death points
+            maze_df = self.results_df[self.results_df['maze'] == maze_name] if hasattr(self, 'results_df') else pd.DataFrame(self.results)
+            maze_df = maze_df[maze_df['maze'] == maze_name]
+            maze_df = maze_df[maze_df['death_count'] > 0] if 'death_count' in maze_df.columns else maze_df[maze_df['death_x'].notnull()]
+            
+            if len(maze_df) == 0:
+                print(f"    No death points found for {maze_name}")
+                continue
+            
+            print(f"    Found {len(maze_df)} conditions with deaths for {maze_name}")
+            
+            # 1. Create TOTAL death point heatmap (all agents combined)
+            total_heatmap = np.zeros((maze_height, maze_width))
+            for _, row in maze_df.iterrows():
+                if 'death_x' in row and 'death_y' in row and row['death_x'] is not None and row['death_y'] is not None:
+                    x, y = int(row['death_x']), int(row['death_y'])
+                    if 0 <= x < maze_height and 0 <= y < maze_width:
+                        death_count = row.get('death_count', 1)
+                        total_heatmap[x, y] += death_count
+            
+            # Create total death plot
+            plt.figure(figsize=(12, 10))
+            plt.imshow(maze_layout == 1, cmap='gray', interpolation='nearest', alpha=0.3)
+            im = plt.imshow(total_heatmap, cmap='hot', interpolation='nearest', alpha=0.8)
+            plt.colorbar(im, label='Death Count')
+            plt.title(f'Total Death Point Heatmap - {maze_name}\n({len(maze_df)} conditions with deaths)', fontsize=14)
+            plt.xlabel('Y', fontsize=12)
+            plt.ylabel('X', fontsize=12)
+            plt.gca().invert_yaxis()
+            
+            # Add statistics
+            total_deaths = maze_df['death_count'].sum() if 'death_count' in maze_df.columns else len(maze_df)
+            max_deaths_at_point = np.max(total_heatmap)
+            avg_deaths_per_point = np.mean(total_heatmap[total_heatmap > 0]) if np.any(total_heatmap > 0) else 0
+            
+            stats_text = f'Total Deaths: {total_deaths}\nMax Deaths at Single Point: {max_deaths_at_point:.0f}\nAvg Deaths per Hotspot: {avg_deaths_per_point:.1f}'
+            plt.text(0.02, 0.98, stats_text, transform=plt.gca().transAxes, 
+                    verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            
+            output_path = os.path.join(self.results_dir, f'death_point_heatmap_{maze_name}.png')
+            plt.savefig(output_path, dpi=300, bbox_inches='tight')
+            plt.close()
+            print(f"    Saved total heatmap to {output_path}")
+            
+            # 2. Create PER-AGENT death point heatmaps
+            agents = maze_df['agent'].unique()
+            print(f"    Creating per-agent heatmaps for {len(agents)} agents...")
+            
+            for agent in agents:
+                agent_df = maze_df[maze_df['agent'] == agent]
+                if len(agent_df) == 0:
+                    continue
+                
+                # Create heatmap for this agent
+                agent_heatmap = np.zeros((maze_height, maze_width))
+                for _, row in agent_df.iterrows():
+                    if 'death_x' in row and 'death_y' in row and row['death_x'] is not None and row['death_y'] is not None:
+                        x, y = int(row['death_x']), int(row['death_y'])
+                        if 0 <= x < maze_height and 0 <= y < maze_width:
+                            death_count = row.get('death_count', 1)
+                            agent_heatmap[x, y] += death_count
+                
+                # Create plot for this agent
+                plt.figure(figsize=(12, 10))
+                plt.imshow(maze_layout == 1, cmap='gray', interpolation='nearest', alpha=0.3)
+                im = plt.imshow(agent_heatmap, cmap='hot', interpolation='nearest', alpha=0.8)
+                plt.colorbar(im, label='Death Count')
+                plt.title(f'Death Point Heatmap - {maze_name} - {agent}\n({len(agent_df)} conditions with deaths)', fontsize=14)
+                plt.xlabel('Y', fontsize=12)
+                plt.ylabel('X', fontsize=12)
+                plt.gca().invert_yaxis()
+                
+                # Add agent-specific statistics
+                agent_deaths = agent_df['death_count'].sum() if 'death_count' in agent_df.columns else len(agent_df)
+                max_deaths_at_point = np.max(agent_heatmap)
+                avg_deaths_per_point = np.mean(agent_heatmap[agent_heatmap > 0]) if np.any(agent_heatmap > 0) else 0
+                
+                stats_text = f'Agent: {agent}\nTotal Deaths: {agent_deaths}\nMax Deaths at Single Point: {max_deaths_at_point:.0f}\nAvg Deaths per Hotspot: {avg_deaths_per_point:.1f}'
+                plt.text(0.02, 0.98, stats_text, transform=plt.gca().transAxes, 
+                        verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+                
+                # Save agent-specific plot
+                agent_safe_name = agent.replace(' ', '_').replace('-', '_')
+                output_path = os.path.join(self.results_dir, f'death_point_heatmap_{maze_name}_{agent_safe_name}.png')
+                plt.savefig(output_path, dpi=300, bbox_inches='tight')
+                plt.close()
+                print(f"      Saved {agent} heatmap to {output_path}")
+        
+        print("Death point heatmaps created!")
     
     def run_analysis(self):
         """Run all analysis components."""
@@ -645,25 +774,47 @@ class UnifiedExperimentAnalyzer:
         print("=" * 60)
         # Only list files that are actually generated by the script
         generated_files = [
-            'reward_configuration_analysis.png',
+            'agent_performance_comparison.png',
+            'maze_performance_analysis.png',
+            'reward_config_performance.png',
+            'agent_maze_heatmap.png',
+            'agent_reward_heatmap.png',
+            'learning_curves.png',
+            'statistical_summary.png',
             'learning_progress_comprehensive.png',
             'learning_improvement_heatmap.png',
-            'learning_improvement_by_rewards.png',
+            'risk_threshold_evolution.png',
             'comprehensive_results.csv'
         ]
+        
+        # Add death point heatmaps
+        import glob
+        maze_configs_dir = os.path.join(os.path.dirname(__file__), 'environments', 'maze_configs')
+        maze_config_files = glob.glob(os.path.join(maze_configs_dir, '*.json'))
+        for maze_config_file in maze_config_files:
+            maze_name = os.path.basename(maze_config_file).replace('.json', '')
+            generated_files.append(f'death_point_heatmap_{maze_name}.png')
         print("Generated files:")
         for file in generated_files:
-            if os.path.exists(file):
+            file_path = os.path.join(self.results_dir, file)
+            if os.path.exists(file_path):
                 print(f"  ✓ {file}")
             else:
                 print(f"  ✗ {file} (not found)")
         # User reference: these are the main result files to check as PNG/CSV
         print("\nMain result files:")
-        print("- reward_configuration_analysis.png: Reward config analysis plot")
+        print("- agent_performance_comparison.png: Agent performance comparison")
+        print("- maze_performance_analysis.png: Maze performance analysis")
+        print("- reward_config_performance.png: Reward configuration analysis")
+        print("- agent_maze_heatmap.png: Agent-maze interaction heatmap")
+        print("- agent_reward_heatmap.png: Agent-reward interaction heatmap")
+        print("- learning_curves.png: Learning improvement curves")
+        print("- statistical_summary.png: Statistical summary plots")
         print("- learning_progress_comprehensive.png: Learning progress curves")
-        print("- learning_improvement_heatmap.png: Heatmap of learning improvement")
-        print("- learning_improvement_by_rewards.png: Learning by reward config")
+        print("- learning_improvement_heatmap.png: Learning improvement heatmap")
+        print("- risk_threshold_evolution.png: Risk threshold evolution")
         print("- comprehensive_results.csv: All experiment results (CSV)")
+        print(f"\nAll files are saved in: {self.results_dir}")
 
 def main():
     """Main function - runs everything in one go!"""

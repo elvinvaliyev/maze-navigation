@@ -17,10 +17,14 @@ class VisualizationEngine:
     
     def __init__(self):
         self.results = None
-        self.output_dir = "."
+        self.output_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'results')
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir)
         
-    def load_results(self, results_file: str = "comprehensive_results.csv"):
+    def load_results(self, results_file: str = None):
         """Load experiment results for visualization."""
+        if results_file is None:
+            results_file = os.path.join(self.output_dir, "comprehensive_results.csv")
         try:
             self.results = pd.read_csv(results_file)
             print(f"Loaded {len(self.results)} results from {results_file}")
