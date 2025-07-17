@@ -3,23 +3,49 @@
 from collections import defaultdict, deque
 from typing import Tuple, Dict, List, Any
 import random
+import numpy as np
 from agents.base_agent import BaseAgent
 
 class SuccessorRepresentationReasonableAgent(BaseAgent):
     """
-    SR-Reasonable: Initialize with maze knowledge, then combine SR values with
-    uncertainty bonus and risk-adjusted rewards. Uses maze layout to pre-compute
-    initial SR values and considers swap probabilities.
+    Enhanced SR-Reasonable: Initialize with maze knowledge, then use SR for value estimation.
+    Uses maze layout to pre-compute initial SR values.
+    Now includes learning tracking and performance monitoring.
     """
 
-    def __init__(self, alpha: float = 0.1, beta: float = 1.0):
+    def __init__(self, alpha: float = 0.5, beta: float = 1.0, exploration_rate: float = 0.3, exploration_decay: float = 0.995):
         super().__init__()
         self.alpha = alpha
         self.beta = beta
-        self.M = defaultdict(lambda: defaultdict(float))
+        self.exploration_rate = exploration_rate
+        self.exploration_decay = exploration_decay
+        self.min_exploration = 0.01
+        
+        # SR learning
+        self.M = defaultdict(lambda: defaultdict(float))  # M[s][s'] = expected future occupancy
+        self.R = defaultdict(float)  # Reward vector for each state
         self.visit_counts = defaultdict(int)
         self.prev_state = None
         self.initialized = False
+        
+        # Performance tracking
+        self.episode_rewards = []
+        self.performance_history = []
+        self.learning_progress = []
+        
+        # Swap-related
+        self.swap_prob = None
+        self.prev_reward_positions = None  # For swap detection
+        self.swap_detected = False
+        self.swap_exploration_boost = 0
+        self.swap_exploration_boost_episodes = 5
+        # --- Swap schedule learning additions ---
+        self.swap_history = []  # List of swap steps in the current episode
+        self.learned_swap_counts = defaultdict(int)  # step -> count
+        self.total_episodes = 0
+        self.risk_threshold = 0.7  # Start cautious
+        self.episode_history = []
+        self.risk_threshold_history = []  # Track risk threshold changes
 
     def _initialize_sr_with_maze(self, state):
         """Pre-compute initial SR values using maze layout."""
@@ -52,87 +78,69 @@ class SuccessorRepresentationReasonableAgent(BaseAgent):
                         
         self.initialized = True
 
-    def select_action(self, state: Any) -> str:
-        # Initialize SR values if not done yet
-        self._initialize_sr_with_maze(state)
-        
-        s = state.get_position()
-        legal = state.available_actions()
+    def _encode_state(self, state) -> str:
+        pos = state.get_position()
+        rewards = tuple(sorted(state.get_reward_positions().items()))
+        return f"{pos}_{rewards}"
 
-        best_a, best_val = None, -float('inf')
-        current_step = state.step_count
+    def observe_swap(self, step):
+        self.swap_history.append(step)
+        self.learned_swap_counts[step] += 1
 
-        # Pre-fetch reward positions and values
-        rewards = state.get_reward_positions()
-        sorted_rewards = sorted(rewards.items(), key=lambda kv: kv[1], reverse=True)
-        
-        for a in legal:
-            # Simulate move → next_pos
-            nr, nc = self._simulate_move(s, a, state.grid)
-            next_pos = (nr, nc)
+    def reset_swap_history(self):
+        self.swap_history = []
 
-            # 1) SR-Value contribution: V_sr = sum_{s'} M[next_pos][s'] * R(s')
-            V_sr = 0.0
-            for (rpos, rval) in rewards.items():
-                V_sr += self.M[next_pos].get(rpos, 0.0) * rval
+    def get_learned_swap_prob(self, step):
+        # Probability swap occurs at this step (empirical)
+        if self.total_episodes == 0:
+            return 0.0
+        return self.learned_swap_counts[step] / self.total_episodes
 
-            # Add value for reaching exit
-            if len(rewards) == 0:  # If no rewards left, value the exit more
-                exit_bonus = 5.0
-            else:
-                exit_bonus = 0.1
-            V_sr += self.M[next_pos][state.exit] * exit_bonus
+    def estimated_swap_likelihood(self, step, dist):
+        # Estimate probability of at least one swap in the next 'dist' steps
+        if self.total_episodes == 0:
+            return 0.0
+        prob_no_swap = 1.0
+        for s in range(step+1, step+dist+1):
+            p = self.get_learned_swap_prob(s)
+            prob_no_swap *= (1 - p)
+        return 1.0 - prob_no_swap
 
-            # 2) Uncertainty bonus: bonus = beta / sqrt(visit_counts[next_pos] + 1)
-            bonus = self.beta / ((self.visit_counts[next_pos] + 1) ** 0.5)
+    def select_action(self, state) -> str:
+        if not self.initialized:
+            self._initialize_sr_with_maze(state)
+        legal_actions = state.available_actions()
+        self.last_state = state
+        if random.random() < self.exploration_rate:
+            return random.choice(legal_actions)
+        current_pos = state.get_position()
+        grid = state.grid
+        # Compute value-to-go for each action using SR and reward vector
+        action_scores = {}
+        for action in legal_actions:
+            next_pos = self._simulate_move(current_pos, action, grid)
+            # Value-to-go: sum over s' of M[next_pos][s'] * R[s']
+            value = 0.0
+            for s_prime in self.M[next_pos]:
+                value += self.M[next_pos][s_prime] * self.R[s_prime]
+            action_scores[action] = value
+        if action_scores:
+            best_action = max(action_scores, key=action_scores.get)
+            return best_action
+        else:
+            return random.choice(legal_actions)
 
-            # 3) Risk-adjusted reward for going to whichever door this path leads toward
-            expected_reward = 0.0
-            
-            # Only consider swap probabilities if we have both rewards
-            if len(sorted_rewards) == 2 and self.swap_prob is not None:
-                (high_pos, high_val), (low_pos, low_val) = sorted_rewards
-                dist_high = self.bfs_shortest_dist(state.grid, next_pos, high_pos)
-                dist_low = self.bfs_shortest_dist(state.grid, next_pos, low_pos)
-                exp_val_high, exp_val_low = self.expected_value_with_swap(dist_high, dist_low, high_val, low_val, self.swap_prob)
-                if self._is_on_path(next_pos, high_pos, state.grid):
-                    expected_reward = exp_val_high
-                elif self._is_on_path(next_pos, low_pos, state.grid):
-                    expected_reward = exp_val_low
-            # If only one reward left, no need for swap probability
-            elif len(sorted_rewards) == 1:
-                reward_pos, reward_val = sorted_rewards[0]
-                if self._is_on_path(next_pos, reward_pos, state.grid):
-                    expected_reward = reward_val
-            # If no rewards left, head to exit
-            elif len(sorted_rewards) == 0 and self._is_on_path(next_pos, state.exit, state.grid):
-                expected_reward = 1.0  # Small bonus for heading to exit
-
-            # Combine all factors
-            val = V_sr + bonus + expected_reward
-            
-            # Add extra value for moves toward exit when close to step limit
-            steps_remaining = state.max_steps - current_step
-            if steps_remaining < 10:  # If close to step limit
-                if self._is_on_path(next_pos, state.exit, state.grid):
-                    val += (10 - steps_remaining) * 2  # Increasing urgency to reach exit
-
-            if val > best_val:
-                best_val = val
-                best_a = a
-
-        # If all actions seem equal, prefer unexplored directions
-        if best_val <= 0:
-            unexplored = [a for a in legal if self.visit_counts[self._simulate_move(s, a, state.grid)] == 0]
-            if unexplored:
-                return random.choice(unexplored)
-
-        return best_a if best_a is not None else random.choice(legal)
+    def expected_value_with_swap(self, dist1, dist2, val1, val2, swap_likelihood1, swap_likelihood2):
+        # Estimate expected value for each reward branch, considering swap risk
+        # If swap is likely before arrival, expected value is lower
+        exp_val1 = (1 - swap_likelihood1) * val1 + swap_likelihood1 * val2
+        exp_val2 = (1 - swap_likelihood2) * val2 + swap_likelihood2 * val1
+        return exp_val1, exp_val2
 
     def update(self, state: Any, action: str, reward: float, next_state: Any) -> None:
         s = self.prev_state
         if s is not None:
-            s_next = next_state  # next_state is already a position tuple
+            s_next = next_state.get_position()  # next_state is env
             # Ensure M[s] and M[s_next] exist
             _ = self.M[s][s]
             _ = self.M[s_next][s_next]
@@ -142,8 +150,99 @@ class SuccessorRepresentationReasonableAgent(BaseAgent):
                 target += self.M[s_next].get(s_prime, 0.0)
                 self.M[s][s_prime] += self.alpha * (target - self.M[s].get(s_prime, 0.0))
 
-        self.prev_state = next_state
-        self.visit_counts[next_state] += 1
+        # Update reward vector for the current state if reward is nonzero
+        pos = next_state.get_position()
+        if reward != 0:
+            self.R[pos] = reward
+        self.prev_state = next_state.get_position()  # next_state is env
+        self.visit_counts[self.prev_state] += 1
+        # --- Swap detection logic ---
+        if self.prev_reward_positions is not None:
+            if hasattr(self, 'last_state') and self.last_state is not None:
+                current_rewards = self.last_state.get_reward_positions()
+                if current_rewards != self.prev_reward_positions:
+                    self.swap_detected = True
+                    self.swap_exploration_boost = self.swap_exploration_boost_episodes
+                    # Record swap step
+                    step = getattr(state, 'step_count', 0)
+                    self.observe_swap(step)
+        self.prev_reward_positions = None
+        if hasattr(self, 'last_state') and self.last_state is not None:
+            self.prev_reward_positions = self.last_state.get_reward_positions()
+        # --- End swap detection ---
+
+    def end_episode(self, total_reward: float, success: bool, maze_name: str = "unknown"):
+        """Called at the end of each episode for learning tracking."""
+        self.episode_rewards.append(total_reward)
+        
+        # Track performance
+        self.performance_history.append({
+            'reward': total_reward,
+            'success': success,
+            'maze': maze_name,
+            'episode': len(self.episode_rewards)
+        })
+        
+        # Track learning progress
+        if len(self.episode_rewards) >= 10:
+            recent_avg = np.mean(self.episode_rewards[-10:])
+            self.learning_progress.append(recent_avg)
+            if len(self.episode_rewards) % 10 == 0:
+                print(f"[SR-Reasonable] Episode {len(self.episode_rewards)} avg reward (last 10): {recent_avg}")
+        
+        # --- Swap learning: finalize episode ---
+        self.total_episodes += 1
+        self.reset_swap_history()
+        # Decay exploration rate
+        self.exploration_rate = max(0.01, self.exploration_rate * self.exploration_decay)
+        # --- Swap learning: finalize episode ---
+        self.end_episode_swap_tracking()
+
+        self.episode_history.append((success, total_reward))
+        if len(self.episode_history) > 20:
+            self.episode_history.pop(0)
+        deaths = sum(1 for s, _ in self.episode_history if not s)
+        if deaths / len(self.episode_history) > 0.2:
+            self.risk_threshold += 0.1  # Be more cautious
+        elif deaths == 0 and len(self.episode_history) == 20:
+            self.risk_threshold -= 0.1  # Be less cautious
+        self.risk_threshold = min(max(self.risk_threshold, 0.1), 0.9)
+        self.risk_threshold_history.append(self.risk_threshold)
+
+    def get_learning_stats(self) -> Dict:
+        """Get current learning statistics."""
+        return {
+            'episodes': len(self.episode_rewards),
+            'avg_reward': np.mean(self.episode_rewards) if self.episode_rewards else 0,
+            'exploration_rate': self.exploration_rate,
+            'sr_matrix_size': len(self.M),
+            'total_visits': sum(self.visit_counts.values()),
+            'learning_progress': self.learning_progress[-10:] if self.learning_progress else [],
+            'recent_performance': self.episode_rewards[-10:] if self.episode_rewards else []
+        }
+
+    def save_learned_knowledge(self, filepath: str):
+        """Save learned knowledge to file."""
+        import pickle
+        knowledge = {
+            'M': dict(self.M),
+            'performance_history': self.performance_history,
+            'episode_rewards': self.episode_rewards,
+            'learning_progress': self.learning_progress
+        }
+        with open(filepath, 'wb') as f:
+            pickle.dump(knowledge, f)
+
+    def load_learned_knowledge(self, filepath: str):
+        """Load learned knowledge from file."""
+        import pickle
+        with open(filepath, 'rb') as f:
+            knowledge = pickle.load(f)
+        
+        self.M = defaultdict(lambda: defaultdict(float), knowledge['M'])
+        self.performance_history = knowledge['performance_history']
+        self.episode_rewards = knowledge['episode_rewards']
+        self.learning_progress = knowledge['learning_progress']
 
     def _simulate_move(self, pos: Tuple[int,int], action: str, grid: List[List[int]]) -> Tuple[int,int]:
         moves = {'up':(-1,0),'down':(1,0),'left':(0,-1),'right':(0,1)}
@@ -215,3 +314,11 @@ class SuccessorRepresentationReasonableAgent(BaseAgent):
                     seen.add((nr,nc))
                     q.append((nr,nc,d+1))
         return float('inf') 
+
+    def _delta_to_action(self, curr, nxt):
+        dr, dc = (nxt[0] - curr[0], nxt[1] - curr[1])
+        if (dr, dc) == (-1, 0): return 'up'
+        if (dr, dc) == (1, 0): return 'down'
+        if (dr, dc) == (0, -1): return 'left'
+        if (dr, dc) == (0, 1): return 'right'
+        raise ValueError(f"Unknown delta {dr,dc}") 

@@ -1,6 +1,23 @@
 #!/usr/bin/env python3
 import sys, os
 import matplotlib.pyplot as plt
+from collections import deque
+
+def bfs(grid, start, goal):
+    rows, cols = len(grid), len(grid[0])
+    visited = set()
+    queue = deque([(start, 0)])
+
+    while queue:
+        (r, c), dist = queue.popleft()
+        if (r, c) == goal:
+            return [0] * dist  # sadece uzunluğu için sayıyoruz
+        for dr, dc in [(-1,0), (1,0), (0,-1), (0,1)]:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] == 0 and (nr, nc) not in visited:
+                visited.add((nr, nc))
+                queue.append(((nr, nc), dist + 1))
+    return []
 
 # ─── ensure project root is importable ───
 script_dir   = os.path.dirname(os.path.abspath(__file__))
@@ -55,7 +72,7 @@ def run_interactive(env, agent, pause=0.2):
         action = agent.select_action(env)
         ns, rew, done = env.step(action)
         agent.add_reward(rew)
-        agent.update(env, action, rew, ns)
+        agent.update(env, action, rew, env)  # Pass env instead of ns (position tuple)
         agent.set_position(ns)
 
         if done:
@@ -83,24 +100,42 @@ def run_interactive(env, agent, pause=0.2):
         else:
             print("⚠️ Agent ran out of moves before reaching the exit.")
 
-if __name__ == "__main__":
-    cfg = os.path.join(project_root, "environments", "maze_configs", "maze1.json")
-    env = MazeEnvironment.from_json(cfg)
-    print("Auto-computed step budget:", env.max_steps)
 
-    # schedule a swap at the decision fork
-    env.swap_steps = schedule_fork_swap(
-        grid             = env.grid,
-        start            = env.start,
-        reward_positions = [pos for pos,_ in env.initial_rewards],
-        jitter           = 1
-    )
-    env.swap_prob = 1.0
-    print("Fork-scheduled swap step:", env.swap_steps)
+if __name__ == "__main__":
+    cfg = os.path.join(project_root, "environments", "maze_configs", "maze6.json")
+    env = MazeEnvironment.from_json(cfg)
+    USE_MANUAL_BUDGET = True  # Toggle this to switch modes
+
+    if USE_MANUAL_BUDGET:
+        step_budgets = [10, 20, 30, 45, 60, 80]
+        env.max_steps = step_budgets[3]  # Choose index 3 → 45
+        print("Using manually set step budget:", env.max_steps)
+    else:
+        # Adjust step budget for fork-style mazes (like maze5)
+        start = env.start
+        exit_pos = env.exit
+        reward_positions = [pos for pos, _ in env.initial_rewards]
+
+        if len(reward_positions) >= 1:
+            to_reward = bfs(env.grid, start, reward_positions[0])
+            reward_to_exit = bfs(env.grid, reward_positions[0], exit_pos)
+            tight_budget = len(to_reward) + len(reward_to_exit) + 1
+            buffer = 6
+            env.max_steps = tight_budget + buffer
+            print("Adjusted tight step budget:", env.max_steps)
+
+        env.swap_steps = schedule_fork_swap(
+            grid             = env.grid,
+            start            = env.start,
+            reward_positions = [pos for pos, _ in env.initial_rewards],
+            jitter           = 1
+        )
+        env.swap_prob = 1.0
+        print("Fork-scheduled swap step:", env.swap_steps)
 
     # Choose exactly one agent to run:
     # 1) Impulsive Greedy (ignores budget):
-    agent = ModelBasedGreedyAgent(step_budget=env.max_steps)
+    #agent = ModelBasedGreedyAgent(step_budget=env.max_steps)
 
     # 2) Survival-Aware (won't die if it can avoid it):
     #agent = ModelBasedSurvivalAgent(env.max_steps)
@@ -109,6 +144,5 @@ if __name__ == "__main__":
     #agent = SuccessorRepresentationGreedyAgent(alpha=0.1)
 
     # 4) SR-Reasonable (SR + exploration bonus + swap-risk adjustment):
-    #agent = SuccessorRepresentationReasonableAgent(alpha=0.1, beta=1.0)
-
+    agent = SuccessorRepresentationReasonableAgent(alpha=0.1, beta=1.0)
     run_interactive(env, agent)

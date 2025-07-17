@@ -1,390 +1,234 @@
-#!/usr/bin/env python3
 """
-Advanced Performance Metrics Analysis for Maze Navigation
+Performance metrics module for maze navigation experiments.
 
-This module provides comprehensive performance analysis including:
-- Multi-criteria ranking systems
-- Risk-adjusted performance metrics
-- Efficiency calculations
-- Performance stability analysis
-- Agent specialization analysis
+This module provides comprehensive performance analysis including
+efficiency metrics, learning curves, and performance rankings.
 """
 
 import pandas as pd
 import numpy as np
-from scipy import stats
-import warnings
-warnings.filterwarnings('ignore')
+from typing import Dict, List, Tuple
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 class PerformanceAnalyzer:
-    def __init__(self, data_path='../comprehensive_results.csv'):
-        """Initialize the performance analyzer with data."""
-        self.df = pd.read_csv(data_path)
-        self.agents = self.df['agent'].unique()
-        self.metrics = ['avg_reward', 'exit_rate', 'survival_rate', 'avg_risk_adjusted_return', 'avg_path_efficiency']
-        
-    def calculate_composite_score(self, weights=None):
-        """Calculate a composite performance score using weighted metrics."""
-        if weights is None:
-            # Default weights: equal importance
-            weights = {
-                'avg_reward': 0.2,
-                'exit_rate': 0.25,
-                'survival_rate': 0.25,
-                'avg_risk_adjusted_return': 0.2,
-                'avg_path_efficiency': 0.1
-            }
-        
-        print("="*80)
-        print("COMPOSITE PERFORMANCE SCORE ANALYSIS")
-        print("="*80)
-        print(f"Weights: {weights}")
-        
-        # Normalize metrics to 0-1 scale
-        normalized_scores = {}
-        for metric in self.metrics:
-            min_val = self.df[metric].min()
-            max_val = self.df[metric].max()
-            normalized_scores[metric] = (self.df[metric] - min_val) / (max_val - min_val)
-        
-        # Calculate weighted composite score
-        composite_score = sum(weights[metric] * normalized_scores[metric] for metric in self.metrics)
-        
-        # Group by agent and calculate statistics
-        agent_scores = self.df.groupby('agent').apply(
-            lambda x: pd.Series({
-                'composite_score': composite_score[x.index].mean(),
-                'score_std': composite_score[x.index].std(),
-                'score_min': composite_score[x.index].min(),
-                'score_max': composite_score[x.index].max()
-            })
-        ).sort_values('composite_score', ascending=False)
-        
-        print("\nComposite Performance Rankings:")
-        print("-" * 50)
-        for i, (agent, row) in enumerate(agent_scores.iterrows(), 1):
-            print(f"{i}. {agent}: {row['composite_score']:.4f} ± {row['score_std']:.4f}")
-        
-        return agent_scores, composite_score
+    """Performance analysis for maze navigation agents."""
     
-    def analyze_performance_stability(self):
-        """Analyze the stability/consistency of agent performance."""
-        print("\n" + "="*80)
-        print("PERFORMANCE STABILITY ANALYSIS")
-        print("="*80)
+    def __init__(self):
+        self.results = None
         
-        stability_metrics = {}
-        
-        for metric in self.metrics:
-            print(f"\n{metric.upper().replace('_', ' ')}:")
-            print("-" * 50)
-            
-            metric_stability = {}
-            
-            for agent in self.agents:
-                agent_data = self.df[self.df['agent'] == agent][metric]
-                
-                # Calculate stability metrics
-                mean_val = agent_data.mean()
-                std_val = agent_data.std()
-                cv = std_val / mean_val if mean_val != 0 else 0  # Coefficient of variation
-                
-                # Calculate interquartile range
-                q75, q25 = np.percentile(agent_data, [75, 25])
-                iqr = q75 - q25
-                
-                # Calculate range
-                data_range = agent_data.max() - agent_data.min()
-                
-                print(f"  {agent}:")
-                print(f"    Mean: {mean_val:.4f}")
-                print(f"    Std: {std_val:.4f}")
-                print(f"    CV: {cv:.4f}")
-                print(f"    IQR: {iqr:.4f}")
-                print(f"    Range: {data_range:.4f}")
-                
-                metric_stability[agent] = {
-                    'mean': mean_val,
-                    'std': std_val,
-                    'cv': cv,
-                    'iqr': iqr,
-                    'range': data_range
-                }
-            
-            stability_metrics[metric] = metric_stability
-        
-        return stability_metrics
+    def load_results(self, results_file: str = "comprehensive_results.csv"):
+        """Load experiment results for analysis."""
+        try:
+            self.results = pd.read_csv(results_file)
+            print(f"Loaded {len(self.results)} results from {results_file}")
+            return True
+        except FileNotFoundError:
+            print(f"Results file {results_file} not found")
+            return False
     
-    def calculate_risk_adjusted_metrics(self):
-        """Calculate various risk-adjusted performance metrics."""
-        print("\n" + "="*80)
-        print("RISK-ADJUSTED PERFORMANCE METRICS")
-        print("="*80)
-        
-        risk_metrics = {}
-        
-        for agent in self.agents:
-            print(f"\n{agent}:")
-            print("-" * 30)
-            
-            agent_data = self.df[self.df['agent'] == agent]
-            
-            # Calculate risk-adjusted metrics
-            reward_mean = agent_data['avg_reward'].mean()
-            reward_std = agent_data['avg_reward'].std()
-            
-            # Sharpe-like ratio (reward per unit of risk)
-            sharpe_ratio = reward_mean / reward_std if reward_std != 0 else 0
-            
-            # Sortino-like ratio (using downside deviation)
-            downside_returns = agent_data['avg_reward'][agent_data['avg_reward'] < reward_mean]
-            downside_dev = np.sqrt(np.mean((downside_returns - reward_mean) ** 2)) if len(downside_returns) > 0 else 0
-            sortino_ratio = reward_mean / downside_dev if downside_dev != 0 else 0
-            
-            # Calmar-like ratio (reward per unit of maximum drawdown)
-            cumulative_rewards = agent_data['avg_reward'].cumsum()
-            running_max = cumulative_rewards.expanding().max()
-            drawdown = (cumulative_rewards - running_max) / running_max
-            max_drawdown = abs(drawdown.min()) if drawdown.min() < 0 else 0
-            calmar_ratio = reward_mean / max_drawdown if max_drawdown != 0 else 0
-            
-            print(f"  Sharpe-like ratio: {sharpe_ratio:.4f}")
-            print(f"  Sortino-like ratio: {sortino_ratio:.4f}")
-            print(f"  Calmar-like ratio: {calmar_ratio:.4f}")
-            
-            risk_metrics[agent] = {
-                'sharpe_ratio': sharpe_ratio,
-                'sortino_ratio': sortino_ratio,
-                'calmar_ratio': calmar_ratio,
-                'reward_mean': reward_mean,
-                'reward_std': reward_std,
-                'max_drawdown': max_drawdown
-            }
-        
-        return risk_metrics
+    def add_composite_improvement(self, w1=0.4, w2=0.2, w3=0.3, w4=0.1):
+        """Compute and add a composite improvement metric to the results DataFrame."""
+        if self.results is None:
+            return
+        # Compute deltas between first and last 20% of episodes per condition
+        def compute_composite(row_group):
+            N = len(row_group)
+            window = max(1, int(N * 0.2))
+            if N < 2 * window:
+                return np.nan
+            first = row_group.iloc[:window]
+            last = row_group.iloc[-window:]
+            d_reward = np.mean(last['avg_reward']) - np.mean(first['avg_reward'])
+            d_exit = np.mean(last['exit_rate']) - np.mean(first['exit_rate'])
+            d_survival = np.mean(last['survival_rate']) - np.mean(first['survival_rate'])
+            d_eff = np.mean(last['avg_path_efficiency']) - np.mean(first['avg_path_efficiency'])
+            return w1 * d_reward + w2 * d_exit + w3 * d_survival + w4 * d_eff
+        # Group by agent/maze/reward/step/swap (or whatever columns exist)
+        group_cols = [c for c in ['agent','maze','reward_config','step_budget','swap_prob'] if c in self.results.columns]
+        composite_scores = self.results.groupby(group_cols, group_keys=False).apply(compute_composite)
+        self.results['composite_improvement'] = composite_scores.values
     
-    def analyze_agent_specialization(self):
-        """Analyze which agents specialize in different types of tasks."""
-        print("\n" + "="*80)
-        print("AGENT SPECIALIZATION ANALYSIS")
-        print("="*80)
+    def calculate_efficiency_metrics(self) -> Dict:
+        """Calculate efficiency metrics for each agent."""
+        if self.results is None:
+            return {}
+        self.add_composite_improvement()
+        efficiency_metrics = {}
         
-        specialization_data = {}
-        
-        # Analyze performance across different conditions
-        conditions = {
-            'High Risk (High Swap Prob)': self.df['swap_prob'] >= 0.5,
-            'Low Risk (Low Swap Prob)': self.df['swap_prob'] <= 0.2,
-            'Big Reward Difference': self.df['reward_config'].str.contains('big'),
-            'Small Reward Difference': self.df['reward_config'].str.contains('small'),
-            'Equal Rewards': self.df['reward_config'].str.contains('equal')
-        }
-        
-        for condition_name, condition_mask in conditions.items():
-            print(f"\n{condition_name}:")
-            print("-" * 50)
-            
-            condition_data = self.df[condition_mask]
-            if len(condition_data) == 0:
-                print("  No data for this condition")
-                continue
-            
-            # Calculate best agent for each metric in this condition
-            best_agents = {}
-            for metric in self.metrics:
-                best_agent = condition_data.groupby('agent')[metric].mean().idxmax()
-                best_value = condition_data.groupby('agent')[metric].mean().max()
-                best_agents[metric] = (best_agent, best_value)
-                print(f"  Best {metric}: {best_agent} ({best_value:.4f})")
-            
-            specialization_data[condition_name] = best_agents
-        
-        return specialization_data
-    
-    def calculate_efficiency_metrics(self):
-        """Calculate various efficiency metrics."""
-        print("\n" + "="*80)
-        print("EFFICIENCY METRICS ANALYSIS")
-        print("="*80)
-        
-        efficiency_data = {}
-        
-        for agent in self.agents:
-            print(f"\n{agent}:")
-            print("-" * 30)
-            
-            agent_data = self.df[self.df['agent'] == agent]
+        for agent in self.results['agent'].unique():
+            agent_data = self.results[self.results['agent'] == agent]
             
             # Reward efficiency (reward per step)
-            reward_per_step = agent_data['avg_reward'] / agent_data['avg_steps']
-            reward_efficiency = reward_per_step.mean()
+            avg_reward_per_step = np.mean(agent_data['avg_reward'] / agent_data['avg_steps'])
             
-            # Exit efficiency (exit rate per step)
-            exit_per_step = agent_data['exit_rate'] / agent_data['avg_steps']
-            exit_efficiency = exit_per_step.mean()
+            # Path efficiency (collected rewards vs possible rewards)
+            avg_collection_rate = np.mean(agent_data['avg_collected_rewards'] / 2.0)  # 2 rewards possible
             
-            # Survival efficiency (survival rate per step)
-            survival_per_step = agent_data['survival_rate'] / agent_data['avg_steps']
-            survival_efficiency = survival_per_step.mean()
+            # Survival efficiency (survival rate vs steps used)
+            avg_survival_efficiency = np.mean(agent_data['survival_rate'] * (1 - agent_data['avg_steps'] / agent_data['max_steps']))
             
-            # Risk-adjusted efficiency
-            risk_efficiency = agent_data['avg_risk_adjusted_return'] / agent_data['avg_steps']
-            risk_efficiency_mean = risk_efficiency.mean()
+            # Composite learning efficiency
+            avg_learning_efficiency = np.nanmean(agent_data['composite_improvement'] / 100)  # per episode
             
-            print(f"  Reward per step: {reward_efficiency:.6f}")
-            print(f"  Exit rate per step: {exit_efficiency:.6f}")
-            print(f"  Survival rate per step: {survival_efficiency:.6f}")
-            print(f"  Risk-adjusted return per step: {risk_efficiency_mean:.6f}")
-            
-            efficiency_data[agent] = {
-                'reward_per_step': reward_efficiency,
-                'exit_per_step': exit_efficiency,
-                'survival_per_step': survival_efficiency,
-                'risk_per_step': risk_efficiency_mean
+            efficiency_metrics[agent] = {
+                'reward_per_step': avg_reward_per_step,
+                'collection_rate': avg_collection_rate,
+                'survival_efficiency': avg_survival_efficiency,
+                'learning_efficiency': avg_learning_efficiency,
+                'overall_efficiency': (avg_reward_per_step + avg_collection_rate + avg_survival_efficiency + avg_learning_efficiency) / 4
             }
         
-        return efficiency_data
+        return efficiency_metrics
     
-    def create_performance_rankings(self):
-        """Create comprehensive performance rankings across all metrics."""
-        print("\n" + "="*80)
-        print("COMPREHENSIVE PERFORMANCE RANKINGS")
-        print("="*80)
+    def agent_rankings(self) -> Dict:
+        """Generate performance rankings for agents."""
+        if self.results is None:
+            return {}
         
+        metrics = ['avg_reward', 'exit_rate', 'survival_rate', 'composite_improvement', 'avg_collected_rewards']
         rankings = {}
         
-        for metric in self.metrics:
-            print(f"\n{metric.upper().replace('_', ' ')}:")
-            print("-" * 50)
+        for metric in metrics:
+            # Calculate mean performance for each agent
+            agent_means = self.results.groupby('agent')[metric].mean().sort_values(ascending=False)
             
-            # Calculate rankings
-            metric_rankings = self.df.groupby('agent')[metric].mean().sort_values(ascending=False)
-            
-            for i, (agent, value) in enumerate(metric_rankings.items(), 1):
-                print(f"  {i}. {agent}: {value:.4f}")
-            
-            rankings[metric] = metric_rankings
+            rankings[metric] = {
+                'ranking': agent_means.index.tolist(),
+                'scores': agent_means.values.tolist()
+            }
         
-        # Overall ranking based on average rank across all metrics
-        print("\nOVERALL RANKING (Average Rank Across All Metrics):")
-        print("-" * 50)
+        # Overall ranking (average rank across all metrics)
+        overall_ranks = {}
+        for agent in self.results['agent'].unique():
+            agent_ranks = []
+            for metric in metrics:
+                agent_means = self.results.groupby('agent')[metric].mean().sort_values(ascending=False)
+                rank = list(agent_means.index).index(agent) + 1
+                agent_ranks.append(rank)
+            overall_ranks[agent] = np.mean(agent_ranks)
         
-        agent_ranks = {}
-        for agent in self.agents:
-            ranks = []
-            for metric in self.metrics:
-                rank = rankings[metric].index.get_loc(agent) + 1
-                ranks.append(rank)
-            avg_rank = np.mean(ranks)
-            agent_ranks[agent] = avg_rank
+        # Sort by overall rank
+        overall_ranking = sorted(overall_ranks.items(), key=lambda x: x[1])
+        rankings['overall'] = {
+            'ranking': [agent for agent, _ in overall_ranking],
+            'scores': [score for _, score in overall_ranking]
+        }
         
-        overall_ranking = sorted(agent_ranks.items(), key=lambda x: x[1])
-        for i, (agent, avg_rank) in enumerate(overall_ranking, 1):
-            print(f"  {i}. {agent}: {avg_rank:.2f}")
-        
-        return rankings, overall_ranking
+        return rankings
     
-    def analyze_performance_trends(self):
-        """Analyze performance trends across different experimental parameters."""
-        print("\n" + "="*80)
-        print("PERFORMANCE TREND ANALYSIS")
-        print("="*80)
+    def environment_analysis(self) -> Dict:
+        """Analyze performance across different environments."""
+        if self.results is None:
+            return {}
         
-        trends = {}
+        env_analysis = {}
         
-        # Analyze trends across swap probabilities
-        print("\nPerformance Trends by Swap Probability:")
-        print("-" * 50)
+        # Maze analysis
+        maze_performance = self.results.groupby('maze').agg({
+            'avg_reward': 'mean',
+            'exit_rate': 'mean',
+            'survival_rate': 'mean',
+            'composite_improvement': 'mean'
+        }).round(3)
         
-        for metric in self.metrics:
-            print(f"\n{metric}:")
-            for agent in self.agents:
-                agent_data = self.df[self.df['agent'] == agent]
-                correlation, p_value = stats.pearsonr(agent_data['swap_prob'], agent_data[metric])
-                
-                trend_direction = "increasing" if correlation > 0 else "decreasing"
-                significance = "***" if p_value < 0.001 else "**" if p_value < 0.01 else "*" if p_value < 0.05 else "ns"
-                
-                print(f"  {agent}: {trend_direction} (r={correlation:.3f}, p={p_value:.6f} {significance})")
+        env_analysis['maze_performance'] = maze_performance
         
-        # Analyze trends across reward configurations
-        print("\nPerformance by Reward Configuration:")
-        print("-" * 50)
+        # Reward configuration analysis
+        reward_performance = self.results.groupby('reward_config').agg({
+            'avg_reward': 'mean',
+            'exit_rate': 'mean',
+            'survival_rate': 'mean',
+            'composite_improvement': 'mean'
+        }).round(3)
         
-        for metric in self.metrics:
-            print(f"\n{metric}:")
-            pivot_data = self.df.groupby(['reward_config', 'agent'])[metric].mean().unstack()
-            
-            for agent in self.agents:
-                if agent in pivot_data.columns:
-                    values = pivot_data[agent].dropna()
-                    if len(values) > 1:
-                        # Calculate trend across reward configs
-                        config_order = ['equal', 'small', 'big']
-                        ordered_values = [values.get(config, np.nan) for config in config_order if config in values.index]
-                        if len(ordered_values) >= 2 and not any(np.isnan(ordered_values)):
-                            correlation, p_value = stats.pearsonr(range(len(ordered_values)), ordered_values)
-                            trend_direction = "increasing" if correlation > 0 else "decreasing"
-                            print(f"  {agent}: {trend_direction} across reward configs (r={correlation:.3f})")
+        env_analysis['reward_performance'] = reward_performance
         
-        return trends
+        # Swap probability analysis
+        swap_performance = self.results.groupby('swap_prob').agg({
+            'avg_reward': 'mean',
+            'exit_rate': 'mean',
+            'survival_rate': 'mean',
+            'composite_improvement': 'mean'
+        }).round(3)
+        
+        env_analysis['swap_performance'] = swap_performance
+        
+        return env_analysis
     
-    def generate_comprehensive_performance_report(self):
-        """Generate a comprehensive performance analysis report."""
-        print("="*80)
-        print("COMPREHENSIVE PERFORMANCE ANALYSIS REPORT")
-        print("="*80)
+    def learning_curve_analysis(self) -> Dict:
+        """Analyze learning curves and improvement patterns."""
+        if self.results is None:
+            return {}
+        
+        learning_analysis = {}
+        
+        # Learning improvement by agent
+        agent_learning = self.results.groupby('agent')['composite_improvement'].agg(['mean', 'std', 'min', 'max']).round(3)
+        learning_analysis['agent_learning'] = agent_learning
+        
+        # Learning improvement by environment
+        maze_learning = self.results.groupby('maze')['composite_improvement'].mean().sort_values(ascending=False)
+        learning_analysis['maze_learning'] = maze_learning
+        
+        # Learning improvement by reward configuration
+        reward_learning = self.results.groupby('reward_config')['composite_improvement'].mean().sort_values(ascending=False)
+        learning_analysis['reward_learning'] = reward_learning
+        
+        return learning_analysis
+    
+    def generate_comprehensive_performance_report(self) -> Dict:
+        """Generate a comprehensive performance report."""
+        print("\n" + "="*60)
+        print("COMPREHENSIVE PERFORMANCE ANALYSIS")
+        print("="*60)
+        
+        if not self.load_results():
+            return {}
         
         # Run all analyses
-        composite_scores, _ = self.calculate_composite_score()
-        stability_metrics = self.analyze_performance_stability()
-        risk_metrics = self.calculate_risk_adjusted_metrics()
-        specialization_data = self.analyze_agent_specialization()
         efficiency_metrics = self.calculate_efficiency_metrics()
-        rankings, overall_ranking = self.create_performance_rankings()
-        trends = self.analyze_performance_trends()
+        rankings = self.agent_rankings()
+        env_analysis = self.environment_analysis()
+        learning_analysis = self.learning_curve_analysis()
         
-        # Summary
-        print("\n" + "="*80)
-        print("PERFORMANCE SUMMARY")
-        print("="*80)
+        # Print efficiency metrics
+        print("\n" + "="*40)
+        print("EFFICIENCY METRICS")
+        print("="*40)
+        for agent, metrics in efficiency_metrics.items():
+            print(f"\n{agent}:")
+            for metric, value in metrics.items():
+                print(f"  {metric}: {value:.3f}")
         
-        print("\n1. Overall Best Performers:")
-        for i, (agent, score) in enumerate(composite_scores.head(3).iterrows(), 1):
-            print(f"   {i}. {agent}: {score['composite_score']:.4f}")
+        # Print rankings
+        print("\n" + "="*40)
+        print("AGENT RANKINGS")
+        print("="*40)
+        for metric, ranking_data in rankings.items():
+            print(f"\n{metric.upper()}:")
+            for i, (agent, score) in enumerate(zip(ranking_data['ranking'], ranking_data['scores']), 1):
+                print(f"  {i}. {agent}: {score:.3f}")
         
-        print("\n2. Most Stable Performers (Lowest CV):")
-        stability_ranking = []
-        for agent in self.agents:
-            avg_cv = np.mean([stability_metrics[metric][agent]['cv'] for metric in self.metrics])
-            stability_ranking.append((agent, avg_cv))
+        # Print environment analysis
+        print("\n" + "="*40)
+        print("ENVIRONMENT ANALYSIS")
+        print("="*40)
+        print("\nMaze Performance:")
+        print(env_analysis['maze_performance'])
         
-        stability_ranking.sort(key=lambda x: x[1])
-        for i, (agent, cv) in enumerate(stability_ranking[:3], 1):
-            print(f"   {i}. {agent}: CV={cv:.4f}")
+        print("\nReward Configuration Performance:")
+        print(env_analysis['reward_performance'])
         
-        print("\n3. Best Risk-Adjusted Performers:")
-        risk_ranking = sorted(risk_metrics.items(), key=lambda x: x[1]['sharpe_ratio'], reverse=True)
-        for i, (agent, metrics) in enumerate(risk_ranking[:3], 1):
-            print(f"   {i}. {agent}: Sharpe={metrics['sharpe_ratio']:.4f}")
+        print("\nSwap Probability Performance:")
+        print(env_analysis['swap_performance'])
         
-        print("\n4. Most Efficient Performers:")
-        efficiency_ranking = sorted(efficiency_metrics.items(), key=lambda x: x[1]['risk_per_step'], reverse=True)
-        for i, (agent, metrics) in enumerate(efficiency_ranking[:3], 1):
-            print(f"   {i}. {agent}: Risk/Step={metrics['risk_per_step']:.6f}")
-        
-        return {
-            'composite_scores': composite_scores,
-            'stability_metrics': stability_metrics,
-            'risk_metrics': risk_metrics,
-            'specialization_data': specialization_data,
+        # Save comprehensive report
+        report = {
             'efficiency_metrics': efficiency_metrics,
             'rankings': rankings,
-            'overall_ranking': overall_ranking,
-            'trends': trends
+            'environment_analysis': env_analysis,
+            'learning_analysis': learning_analysis
         }
-
-if __name__ == "__main__":
-    # Create and run performance analyzer
-    analyzer = PerformanceAnalyzer()
-    results = analyzer.generate_comprehensive_performance_report() 
+        
+        return report 

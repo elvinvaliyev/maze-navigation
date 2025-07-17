@@ -1,139 +1,220 @@
-import random
-from collections import deque
+"""
+Swap scheduling utilities for maze navigation experiments.
+
+This module provides functions to schedule reward swaps at strategic
+points in the maze, such as decision forks.
+"""
+
 from typing import List, Tuple
-
-def shortest_path(
-    grid: List[List[int]],
-    start: Tuple[int,int],
-    goal:  Tuple[int,int]
-) -> List[Tuple[int,int]]:
-    """
-    Return one shortest path (as list of cells) from start to goal using BFS.
-    """
-    rows, cols = len(grid), len(grid[0])
-    q = deque([[start]])
-    seen = {start}
-    moves = [(-1,0),(1,0),(0,-1),(0,1)]
-    while q:
-        path = q.popleft()
-        r, c = path[-1]
-        if (r, c) == goal:
-            return path
-        for dr, dc in moves:
-            nr, nc = r + dr, c + dc
-            if (0 <= nr < rows and 0 <= nc < cols
-                and grid[nr][nc] == 0
-                and (nr, nc) not in seen):
-                seen.add((nr, nc))
-                q.append(path + [(nr, nc)])
-    return []
-
-def find_all_decision_points(
-    grid: List[List[int]],
-    start: Tuple[int,int],
-    reward_positions: List[Tuple[int,int]]
-) -> List[Tuple[int,int]]:
-    """Find all points where paths to different rewards diverge."""
-    if len(reward_positions) != 2:
-        return []
-        
-    # Get paths to both rewards
-    path1 = shortest_path(grid, start, reward_positions[0])
-    path2 = shortest_path(grid, start, reward_positions[1])
-    
-    # Find all points where paths diverge
-    decision_points = []
-    common_prefix_len = 0
-    for p1, p2 in zip(path1, path2):
-        if p1 == p2:
-            common_prefix_len += 1
-        else:
-            break
-            
-    if common_prefix_len > 0:
-        # Add the last common point
-        decision_points.append(path1[common_prefix_len - 1])
-        
-    # Also check for decision points from each reward to the other
-    path_between = shortest_path(grid, reward_positions[0], reward_positions[1])
-    if len(path_between) > 2:  # If rewards aren't adjacent
-        mid_point = path_between[len(path_between) // 2]
-        if mid_point not in decision_points:
-            decision_points.append(mid_point)
-            
-    return decision_points
-
-def compute_optimal_swap_steps(
-    grid: List[List[int]],
-    start: Tuple[int,int],
-    reward_positions: List[Tuple[int,int]],
-    max_steps: int
-) -> List[int]:
-    """
-    Schedule swaps at strategic decision points, considering:
-    1. Points where paths to different rewards diverge
-    2. Midpoints between rewards
-    3. Time needed to reach these points
-    """
-    decision_points = find_all_decision_points(grid, start, reward_positions)
-    if not decision_points:
-        return []
-        
-    swap_steps = []
-    for point in decision_points:
-        # Calculate steps needed to reach this point
-        path_to_point = shortest_path(grid, start, point)
-        steps_to_point = len(path_to_point) - 1  # -1 because path includes start
-        
-        # Add some randomness to make it less predictable
-        jitter = random.randint(-2, 2)
-        swap_step = max(1, min(steps_to_point + jitter, max_steps - 1))
-        
-        if swap_step not in swap_steps:
-            swap_steps.append(swap_step)
-            
-    return sorted(swap_steps)
+from collections import deque
 
 def schedule_fork_swap(
-    grid: List[List[int]],
-    start: Tuple[int,int],
-    reward_positions: List[Tuple[int,int]],
+    grid: List[List[int]], 
+    start: Tuple[int, int], 
+    reward_positions: List[Tuple[int, int]], 
     jitter: int = 1
 ) -> List[int]:
     """
-    Enhanced swap scheduling that works well for both simple and complex mazes.
-    """
-    # First try to find the optimal swap steps
-    swap_steps = compute_optimal_swap_steps(grid, start, reward_positions, 100)  # Use large max_steps initially
+    Schedule a swap at the decision fork between rewards.
     
-    if not swap_steps:
-        # Fallback to original method for simpler mazes
-        if len(reward_positions) != 2:
-            return []
-            
-        # Find last common node in paths to rewards
-        p1 = shortest_path(grid, start, reward_positions[0])
-        p2 = shortest_path(grid, start, reward_positions[1])
+    Args:
+        grid: The maze grid
+        start: Starting position
+        reward_positions: List of reward positions
+        jitter: Random jitter to add to the swap step
+    
+    Returns:
+        List of steps when swaps should occur
+    """
+    if len(reward_positions) < 2:
+        return []
+    
+    # Find the decision fork (point where paths to rewards diverge)
+    fork_point = find_decision_fork(grid, start, reward_positions)
+    
+    if fork_point is None:
+        return []
+    
+    # Calculate distance to fork
+    dist_to_fork = bfs_shortest_dist(grid, start, fork_point)
+    
+    # Schedule swap at fork with some jitter
+    import random
+    swap_step = dist_to_fork + random.randint(-jitter, jitter)
+    swap_step = max(1, swap_step)  # Ensure positive step
+    
+    return [swap_step]
+
+def find_decision_fork(
+    grid: List[List[int]], 
+    start: Tuple[int, int], 
+    reward_positions: List[Tuple[int, int]]
+) -> Tuple[int, int]:
+    """
+    Find the decision fork where paths to different rewards diverge.
+    
+    Args:
+        grid: The maze grid
+        start: Starting position
+        reward_positions: List of reward positions
+    
+    Returns:
+        Position of the decision fork, or None if not found
+    """
+    if len(reward_positions) < 2:
+        return None
+    
+    # Find shortest paths to each reward
+    paths = []
+    for reward_pos in reward_positions:
+        path = bfs_shortest_path(grid, start, reward_pos)
+        if path:
+            paths.append(path)
+    
+    if len(paths) < 2:
+        return None
+    
+    # Find the last common point in the paths
+    common_points = set(paths[0])
+    for path in paths[1:]:
+        common_points = common_points.intersection(set(path))
+    
+    if not common_points:
+        return None
+    
+    # Return the point furthest from start (closest to rewards)
+    return max(common_points, key=lambda p: len(bfs_shortest_path(grid, start, p)))
+
+def bfs_shortest_path(grid: List[List[int]], start: Tuple[int, int], goal: Tuple[int, int]) -> List[Tuple[int, int]]:
+    """
+    Find shortest path using BFS.
+    
+    Args:
+        grid: The maze grid
+        start: Starting position
+        goal: Goal position
+    
+    Returns:
+        List of positions forming the shortest path
+    """
+    rows, cols = len(grid), len(grid[0])
+    visited = {start}
+    queue = deque([[start]])
+    
+    moves = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    
+    while queue:
+        path = queue.popleft()
+        current = path[-1]
         
-        lcn = start
-        for u, v in zip(p1, p2):
-            if u == v:
-                lcn = u
-            else:
-                break
-                
-        # Distance to LCN
-        try:
-            d_fork = p1.index(lcn)
-        except ValueError:
-            return []
-            
-        # Compute swap step
-        base = d_fork + 1
-        # Apply jitter
-        t = base + random.randint(-jitter, jitter)
-        # Ensure at least 1
-        t = max(1, t)
-        return [t]
+        if current == goal:
+            return path
         
-    return swap_steps
+        for dr, dc in moves:
+            nr, nc = current[0] + dr, current[1] + dc
+            
+            if (0 <= nr < rows and 0 <= nc < cols and 
+                grid[nr][nc] == 0 and (nr, nc) not in visited):
+                visited.add((nr, nc))
+                queue.append(path + [(nr, nc)])
+    
+    return []
+
+def bfs_shortest_dist(grid: List[List[int]], start: Tuple[int, int], goal: Tuple[int, int]) -> int:
+    """
+    Find shortest distance using BFS.
+    
+    Args:
+        grid: The maze grid
+        start: Starting position
+        goal: Goal position
+    
+    Returns:
+        Shortest distance to goal
+    """
+    path = bfs_shortest_path(grid, start, goal)
+    return len(path) - 1 if path else float('inf')
+
+def schedule_multiple_swaps(
+    grid: List[List[int]], 
+    start: Tuple[int, int], 
+    reward_positions: List[Tuple[int, int]], 
+    num_swaps: int = 2
+) -> List[int]:
+    """
+    Schedule multiple swaps throughout the maze.
+    
+    Args:
+        grid: The maze grid
+        start: Starting position
+        reward_positions: List of reward positions
+        num_swaps: Number of swaps to schedule
+    
+    Returns:
+        List of steps when swaps should occur
+    """
+    if len(reward_positions) < 2:
+        return []
+    
+    # Find the longest path to any reward
+    max_dist = 0
+    for reward_pos in reward_positions:
+        dist = bfs_shortest_dist(grid, start, reward_pos)
+        if dist != float('inf'):
+            max_dist = max(max_dist, dist)
+    
+    if max_dist == 0:
+        return []
+    
+    # Schedule swaps at regular intervals
+    import random
+    swap_steps = []
+    for i in range(num_swaps):
+        step = int(max_dist * (i + 1) / (num_swaps + 1))
+        step += random.randint(-1, 1)  # Add jitter
+        step = max(1, step)
+        swap_steps.append(step)
+    
+    return sorted(swap_steps)
+
+def schedule_adaptive_swaps(
+    grid: List[List[int]], 
+    start: Tuple[int, int], 
+    reward_positions: List[Tuple[int, int]], 
+    difficulty: str = "medium"
+) -> List[int]:
+    """
+    Schedule swaps adaptively based on maze difficulty.
+    
+    Args:
+        grid: The maze grid
+        start: Starting position
+        reward_positions: List of reward positions
+        difficulty: Difficulty level ("easy", "medium", "hard")
+    
+    Returns:
+        List of steps when swaps should occur
+    """
+    if len(reward_positions) < 2:
+        return []
+    
+    # Find decision fork
+    fork_point = find_decision_fork(grid, start, reward_positions)
+    
+    if fork_point is None:
+        return []
+    
+    dist_to_fork = bfs_shortest_dist(grid, start, fork_point)
+    
+    # Adjust based on difficulty
+    if difficulty == "easy":
+        # Early swap, easy to adapt
+        swap_step = max(1, dist_to_fork - 2)
+    elif difficulty == "medium":
+        # At the fork
+        swap_step = dist_to_fork
+    else:  # hard
+        # Late swap, harder to adapt
+        swap_step = dist_to_fork + 3
+    
+    return [swap_step] 
