@@ -17,7 +17,7 @@ This project lets you run and analyze different strategies for solving mazes whe
 ### 1. Run All Experiments (Lifelong + Classic)
 This will run all experiments (using all agent types, all mazes, all reward settings, all step limits, all swap probabilities) and then save results:
 ```bash
-python run_experiments.py --seed 42
+python run_experiments.py
 ```
 - Results and logs will be saved in the `results/` folder.
 - The `--seed` flag ensures full reproducibility (recommended).
@@ -63,7 +63,7 @@ maze-navigation/
 ## Example Workflow
 1. Run all experiments (with reproducibility):
    ```bash
-   python run_experiments.py --seed 42
+   python run_experiments.py 
    ```
 2. Or, just analyze existing results:
    ```bash
@@ -78,8 +78,6 @@ maze-navigation/
 
 ## Extra
 - You can also run `python visualizations/interactive_visualization.py` to explore results interactively.
-- All code and results are organized for easy exploration and sharing.
-- For advanced users: All logs are timestamped and include config hashes for reproducibility.
 
 ---
 **This project is for anyone interested in comparing different maze-solving strategies and seeing how changes in the environment affect results.** 
